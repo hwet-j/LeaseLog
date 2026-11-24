@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>월세 관리</title>
+<style>
+:root{--bg:#f5f3ee;--card:#fff;--ink:#1d2733;--sub:#6b7480;--line:#e6e3da;--pri:#1b6b5a;--pri-d:#14513f;--pri-l:#e2f0eb;--red:#c23b2e;--red-l:#fbe8e5;--amb:#a96a0c;--amb-l:#fdf1d6;--blue:#2b6cb0;--blue-l:#e5eef8;--gray-l:#ebe9e2}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+#app{height:100%;display:flex;flex-direction:column}
+header.top{flex:none;display:flex;align-items:center;gap:4px;padding:10px 12px 6px;min-height:58px}
+header.top .t{flex:1;min-width:0}
+header.top h1{margin:0;font-size:21px;font-weight:800;letter-spacing:-.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header.top .s{font-size:12.5px;color:var(--sub)}
+.ib{border:0;background:transparent;min-width:40px;height:40px;border-radius:12px;font-size:15px;color:var(--ink);padding:0 8px;font-weight:600}
+.ib:active{background:var(--gray-l)}
+.ib.sm{min-width:32px;height:32px;color:var(--sub);font-size:18px}
+.ib.txt{color:var(--pri);font-weight:700}
+main{flex:1;overflow-y:auto;padding:2px 14px 96px;-webkit-overflow-scrolling:touch}
+nav.tabs{flex:none;display:flex;background:#fff;border-top:1px solid var(--line)}
+nav.tabs button{flex:1;border:0;background:none;padding:8px 0 7px;font-size:11px;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:3px}
+nav.tabs button svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+nav.tabs button.on{color:var(--pri);font-weight:800}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+.card.flat{padding:4px 14px}
+h2{font-size:15px;margin:20px 2px 6px;display:flex;align-items:center;gap:8px;font-weight:800}
+h3{font-size:18px;margin:0 0 4px}
+.h{font-weight:800;font-size:15.5px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sub{color:var(--sub);font-size:13px}
+.grow{flex:1;min-width:0}
+.row{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.card .row:first-of-type,.card.flat .row:first-child{border-top:0}
+.row.tap,.rcard.tap,.tap{cursor:pointer}
+.row.tap:active,.rcard.tap:active{background:#faf9f5}
+.r{text-align:right;flex:none}
+.chip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700;white-space:nowrap}
+.c-paid{background:var(--pri-l);color:var(--pri-d)}
+.c-late{background:var(--red-l);color:var(--red)}
+.c-part{background:var(--amb-l);color:var(--amb)}
+.c-wait{background:var(--gray-l);color:var(--sub)}
+.c-vac{background:var(--blue-l);color:var(--blue)}
+.c-act{background:var(--pri-l);color:var(--pri-d)}
+.c-end{background:var(--gray-l);color:var(--sub)}
+.big{font-size:27px;font-weight:800;letter-spacing:-.5px;margin:2px 0 8px}
+.big span{font-size:14px;color:var(--sub);font-weight:600}
+.bar{height:9px;background:var(--gray-l);border-radius:99px;overflow:hidden;margin-bottom:8px}
+.bar i{display:block;height:100%;background:var(--pri);border-radius:99px}
+.rcard{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin:8px 0}
+.rname{min-width:58px;padding:10px 6px;text-align:center;font-weight:800;font-size:16px;background:var(--pri-l);color:var(--pri-d);border-radius:12px}
+.rname.vac{background:var(--blue-l);color:var(--blue)}
+.av{flex:none;width:40px;height:40px;border-radius:50%;background:var(--pri-l);color:var(--pri-d);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px}
+.big2{font-size:30px;font-weight:800;letter-spacing:-.5px}
+.kv{display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+.kv:first-of-type{border-top:0}
+.kv>span:first-child{flex:none;width:78px;color:var(--sub);font-size:13.5px}
+.kv>span:last-child,.kv>div:last-child{flex:1;min-width:0;word-break:break-word}
+.btns{display:flex;gap:8px;margin-top:14px}
+.btn{flex:1;border:0;background:var(--pri);color:#fff;font-weight:700;border-radius:12px;padding:12px 10px;min-height:46px;font-size:15px}
+.btn:active{background:var(--pri-d)}
+.btn.ghost{background:var(--gray-l);color:var(--ink)}
+.btn.dng{background:var(--red-l);color:var(--red);flex:none}
+.btn.sm{flex:none;min-height:36px;padding:7px 12px;font-size:13.5px;border-radius:10px}
+.btn.line{background:#fff;color:var(--pri);border:1.5px solid var(--pri)}
+.acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.empty{color:var(--sub);text-align:center;padding:18px 8px;font-size:14px}
+.fab{position:fixed;right:16px;bottom:76px;border:0;background:var(--pri);color:#fff;border-radius:99px;min-height:50px;padding:0 20px;font-weight:800;font-size:15px;box-shadow:0 6px 18px rgba(20,60,50,.28);z-index:5}
+.fab:active{background:var(--pri-d)}
+.note{display:flex;gap:8px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer}
+.note .tx{white-space:pre-wrap;word-break:break-word}
+.addnote{display:flex;gap:8px;align-items:flex-end;margin-top:8px}
+.addnote textarea{flex:1}
+input,select,textarea{width:100%;border:1.5px solid var(--line);border-radius:11px;padding:11px 12px;background:#fff;min-height:46px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--pri)}
+textarea{resize:none;min-height:46px}
+input[type=checkbox]{width:22px;height:22px;min-height:0;accent-color:var(--pri)}
+.fl{display:block;margin:12px 0 0}
+.fl>span{display:block;font-size:13px;color:var(--sub);margin-bottom:5px;font-weight:600}
+.fl>span em{color:var(--red);font-style:normal}
+.fl.chk{display:flex;align-items:center;gap:10px;margin-top:14px}
+.fl.chk>span{margin:0;color:var(--ink);font-size:15px}
+.fl .hint{font-size:12px;color:var(--sub);margin-top:4px}
+.hidden{display:none!important}
+.sheet-bg{position:fixed;inset:0;background:rgba(18,24,30,.5);display:flex;align-items:flex-end;z-index:50}
+.sheet{background:#fff;width:100%;max-height:92%;overflow-y:auto;border-radius:22px 22px 0 0;padding:20px 16px 22px;animation:up .18s ease-out}
+@keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:rgba(29,39,51,.94);color:#fff;padding:10px 16px;border-radius:99px;font-size:14px;z-index:99;max-width:86%;text-align:center}
+.search{margin:6px 0 4px}
+.banner{background:var(--amb-l);color:#6b4306;border-radius:14px;padding:12px 14px;margin:10px 0;font-size:14px}
+.steps{margin:6px 0 12px;padding-left:20px;line-height:1.9}
+.menu .row{padding:15px 0}
+.menu .row b{font-size:16px}
+.mb{display:flex;align-items:center;gap:10px;padding:5px 0}
+.mb .lb{flex:none;width:44px;font-size:13px;color:var(--sub)}
+.mb .tr{flex:1;height:14px;background:var(--gray-l);border-radius:99px;overflow:hidden}
+.mb .tr i{display:block;height:100%;background:var(--pri);border-radius:99px}
+.mb .vl{flex:none;width:92px;text-align:right;font-size:13.5px;font-variant-numeric:tabular-nums}
+.seg{display:flex;gap:6px;margin:8px 0}
+.seg button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:11px;padding:8px 4px;font-weight:700;color:var(--sub);font-size:14px}
+.seg button.on{border-color:var(--pri);background:var(--pri-l);color:var(--pri-d)}
+.mnav{display:flex;align-items:center;justify-content:space-between;margin:6px 0}
+.mnav b{font-size:19px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function(){
+'use strict';
+var A = window.Android;
+var KEY = 'rentapp.v1';
+
+/* ───────── 데이터 ───────── */
+function blank(){ return {props:[],rooms:[],tenants:[],contracts:[],payments:[],meta:{lastBackup:null,created:new Date().toISOString()}}; }
+function load(){
+  try{ var s=localStorage.getItem(KEY); if(s){ var d=JSON.parse(s); return Object.assign(blank(),d); } }catch(e){}
+  return blank();
+}
+var db = load();
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ toast('저장에 실패했어요'); } }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function byId(arr,id){ for(var i=0;i<arr.length;i++) if(arr[i].id===id) return arr[i]; return null; }
+
+/* ───────── 유틸 ───────── */
+function pad(n){ return String(n).padStart(2,'0'); }
+function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function today(){ return ymd(new Date()); }
+function pd(s){ return new Date(s+'T00:00:00'); }
+function diff(a,b){ return Math.round((pd(b)-pd(a))/864e5); }
+function addM(ym,n){ var p=ym.split('-').map(Number); var m=p[1]-1+n; var y=p[0]+Math.floor(m/12); m=((m%12)+12)%12; return y+'-'+pad(m+1); }
+function addD(s,n){ var d=pd(s); d.setDate(d.getDate()+n); return ymd(d); }
+function yearLater(s){ var d=pd(s); d.setFullYear(d.getFullYear()+1); d.setDate(d.getDate()-1); return ymd(d); }
+function dueOf(c,ym){ var p=ym.split('-').map(Number); var last=new Date(p[0],p[1],0).getDate(); return ym+'-'+pad(Math.min(Number(c.payDay)||1,last)); }
+function n0(v){ return Number(v)||0; }
+function won(n){ return n0(n).toLocaleString('ko-KR')+'원'; }
+function man(n){ n=n0(n); if(n && n%10000===0) return (n/10000).toLocaleString('ko-KR')+'만원'; return won(n); }
+function kd(s){ return s? s.replace(/-/g,'.') : ''; }
+function kds(s){ if(!s) return ''; var p=s.split('-'); return Number(p[1])+'/'+Number(p[2]); }
+function ymLabel(ym){ var p=ym.split('-'); return p[0]+'년 '+Number(p[1])+'월'; }
+function dayLabel(s){ var d=pd(s); return d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 ('+'일월화수목금토'[d.getDay()]+')'; }
+function dday(s){ var n=diff(today(),s); if(n>0) return 'D-'+n; if(n===0) return 'D-Day'; return Math.abs(n)+'일 지남'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function nl(s){ return esc(s).replace(/\n/g,'<br>'); }
+function digits(s){ return String(s||'').replace(/\D/g,''); }
+function fmtPhone(s){
+  var d=digits(s).slice(0,11);
+  if(d.indexOf('02')===0){ d=d.slice(0,10); var r=d.slice(2); if(r.length<=4) return d.length<=2? d : '02-'+r; return '02-'+r.slice(0,r.length-4)+'-'+r.slice(-4); }
+  if(d.length<=3) return d;
+  if(d.length<=7) return d.slice(0,3)+'-'+d.slice(3);
+  if(d.length<=10) return d.slice(0,3)+'-'+d.slice(3,6)+'-'+d.slice(6);
+  return d.slice(0,3)+'-'+d.slice(3,7)+'-'+d.slice(7);
+}
+function natcmp(a,b){ return String(a).localeCompare(String(b),'ko',{numeric:true}); }
+var toastT;
+function toast(m){
+  var old=document.querySelector('.toast'); if(old) old.remove();
+  var t=document.createElement('div'); t.className='toast'; t.textContent=m; document.body.appendChild(t);
+  clearTimeout(toastT); toastT=setTimeout(function(){ t.remove(); },2200);
+}
+function openUri(u){ if(A&&A.openUri) A.openUri(u); else window.open(u,'_blank'); }
+function copyText(t){
+  if(A&&A.copy){ A.copy(t); return true; }
+  try{ var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); var ok=document.execCommand('copy'); ta.remove(); return ok; }catch(e){ return false; }
+}
+
+/* ───────── 계산 ───────── */
+function activeOf(roomId){ return db.contracts.filter(function(c){return c.roomId===roomId && c.status==='active';})[0]||null; }
+function limitOf(c){ return c.status==='active' ? c.end : (c.endedOn||c.end); }
+function allMonths(c){
+  var out=[]; var lim=limitOf(c); if(!c.start||!lim) return out;
+  var ym=c.start.slice(0,7);
+  for(var i=0;i<600;i++){ var d=dueOf(c,ym); if(d>lim) break; if(d>=c.start) out.push(ym); ym=addM(ym,1); }
+  return out;
+}
+function visibleMonths(c){
+  var t=today(), cur=t.slice(0,7);
+  return allMonths(c).filter(function(ym){ return ym<=cur || diff(t,dueOf(c,ym))<=7; });
+}
+function payFor(c,ym){ return db.payments.filter(function(p){return p.contractId===c.id && p.ym===ym;}).sort(function(a,b){return a.paidOn<b.paidOn?-1:1;}); }
+function paidSum(c,ym){ return payFor(c,ym).reduce(function(s,p){return s+n0(p.amount);},0); }
+function mstat(c,ym){
+  var due=n0(c.rent)+n0(c.fee), paid=paidSum(c,ym), d=dueOf(c,ym), days=diff(d,today());
+  var o={due:due,paid:paid,dd:d,days:days,remain:Math.max(0,due-paid)};
+  if(paid>=due){ o.k='paid'; o.l='완납'; }
+  else if(days>0){ if(paid>0){o.k='part';o.l='일부납부 · '+days+'일';} else {o.k='late';o.l='미납 '+days+'일';} }
+  else { if(paid>0){o.k='part';o.l='일부납부';} else {o.k='wait'; o.l= days===0?'오늘 납부일':'D'+days;} }
+  return o;
+}
+function arrears(){
+  var out=[];
+  db.contracts.forEach(function(c){ allMonths(c).forEach(function(ym){ var s=mstat(c,ym); if(s.k!=='paid' && s.days>0) out.push({c:c,ym:ym,s:s}); }); });
+  out.sort(function(a,b){ return a.s.dd<b.s.dd?-1:1; });
+  return out;
+}
+function roomLabel(c){ var r=byId(db.rooms,c.roomId); var p=r&&byId(db.props,r.propId); return (db.props.length>1&&p? p.name+' ':'')+(r?r.name:'(삭제된 호실)'); }
+
+/* ───────── 화면 상태 ───────── */
+var nav={tab:'home',stack:[]};
+var pf={ym:today().slice(0,7),filter:'all',year:new Date().getFullYear()};
+var modals=[];
+var app=document.getElementById('app');
+
+var ICON={
+ home:'<svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>',
+ rooms:'<svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2"/><path d="M10 21v-4h4v4"/></svg>',
+ ppl:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-3.8 3.6-5.6 7.5-5.6s6.7 1.8 7.5 5.6"/></svg>',
+ pay:'<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M7 15h3"/></svg>',
+ more:'<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>'
+};
+var TABS=[['home','홈','home'],['rooms','호실','rooms'],['tenants','세입자','ppl'],['pay','납부','pay'],['more','더보기','more']];
+
+function go(s){ nav.stack.push(s); render(true); }
+function setTab(t){ nav.tab=t; nav.stack=[]; render(true); }
+
+function render(reset){
+  var prev=document.getElementById('main'); var st=prev&&!reset? prev.scrollTop:0;
+  var top=nav.stack[nav.stack.length-1];
+  var title='',sub='',body='',right='',fab='';
+  if(top){
+    if(top.t==='room'){ var r=byId(db.rooms,top.id); if(!r){nav.stack.pop(); return render(true);} title=r.name; sub=(byId(db.props,r.propId)||{}).name||''; body=viewRoom(r); right='<button class="ib txt" data-act="editRoom" data-id="'+r.id+'">편집</button>'; }
+    else if(top.t==='tenant'){ var t=byId(db.tenants,top.id); if(!t){nav.stack.pop(); return render(true);} title=t.name; sub='세입자 정보'; body=viewTenant(t); right='<button class="ib txt" data-act="editTenant" data-id="'+t.id+'">편집</button>'; }
+    else if(top.t==='contract'){ var c=byId(db.contracts,top.id); if(!c){nav.stack.pop(); return render(true);} title='계약 상세'; sub=roomLabel(c); body=viewContract(c); }
+    else if(top.t==='props'){ title='건물 관리'; body=viewProps(); fab='<button class="fab" data-act="addProp">＋ 건물 추가</button>'; }
+    else if(top.t==='stats'){ title='월별 수입'; sub='실제 입금된 금액 기준'; body=viewStats(); }
+    else if(top.t==='backup'){ title='백업 · 복원'; body=viewBackup(); }
+  } else {
+    if(nav.tab==='home'){ title='월세 관리'; sub=dayLabel(today()); body=viewHome(); }
+    else if(nav.tab==='rooms'){ title='호실'; sub='총 '+db.rooms.length+'개'; body=viewRooms(); fab='<button class="fab" data-act="addRoom">＋ 호실 추가</button>'; }
+    else if(nav.tab==='tenants'){ title='세입자'; sub='총 '+db.tenants.length+'명'; body=viewTenants(); fab='<button class="fab" data-act="addTenant">＋ 세입자 추가</button>'; }
+    else if(nav.tab==='pay'){ title='납부 내역'; body=viewPay(); }
+    else if(nav.tab==='more'){ title='더보기'; body=viewMore(); }
+  }
+  var back = top? '<button class="ib" data-act="back" aria-label="뒤로">←</button>' : '';
+  var tabs = TABS.map(function(x){ return '<button class="'+(!top&&nav.tab===x[0]?'on':'')+'" data-act="tab" data-t="'+x[0]+'">'+ICON[x[2]]+'<span>'+x[1]+'</span></button>'; }).join('');
+  app.innerHTML='<header class="top">'+back+'<div class="t"><h1>'+esc(title)+'</h1>'+(sub?'<div class="s">'+esc(sub)+'</div>':'')+'</div>'+right+'</header><main id="main">'+body+'</main>'+fab+'<nav class="tabs">'+tabs+'</nav>';
+  var m=document.getElementById('main'); if(m) m.scrollTop=st;
+}
+
+/* ───────── 홈 ───────── */
+function viewHome(){
+  var t=today(), cur=t.slice(0,7), h='';
+  if(!db.rooms.length){
+    return '<div class="card"><div class="h">처음 시작하기</div><ol class="steps"><li><b>호실 추가</b> – 건물과 호실을 등록해요</li><li><b>입주 계약 등록</b> – 세입자 정보, 월세·관리비, 계약일, 납부일을 입력해요</li><li><b>납부 등록</b> – 월세가 들어오면 납부일을 기록해요</li></ol><div class="btns"><button class="btn" data-act="addRoom">호실 추가하기</button></div></div>'+
+      '<div class="banner">입력한 정보는 이 휴대폰 안에만 저장돼요. 앱을 삭제하면 사라지니 <b>더보기 → 백업</b>을 가끔 해두세요.</div>';
+  }
+  var bill=0,paid=0,cnt=0,done=0;
+  db.contracts.forEach(function(c){ if(allMonths(c).indexOf(cur)>=0){ var s=mstat(c,cur); bill+=s.due; paid+=Math.min(s.paid,s.due); cnt++; if(s.k==='paid') done++; } });
+  var pct=bill? Math.round(paid/bill*100):0;
+  h+='<div class="card"><div class="sub">'+ymLabel(cur)+' 월세 현황</div><div class="big">'+won(paid)+' <span>/ '+won(bill)+'</span></div><div class="bar"><i style="width:'+pct+'%"></i></div><div class="sub">'+done+'/'+cnt+'호실 납부 완료 · 남은 금액 '+won(bill-paid)+'</div></div>';
+
+  var ar=arrears();
+  if(ar.length){
+    var tot=ar.reduce(function(s,x){return s+x.s.remain;},0);
+    h+='<h2>미납 <span class="chip c-late">'+ar.length+'건</span><span class="sub" style="margin-left:auto;font-weight:600">합계 '+won(tot)+'</span></h2>';
+    ar.forEach(function(x){
+      var c=x.c, ten=byId(db.tenants,c.tenantId)||{};
+      h+='<div class="card"><div class="row tap" style="padding:0;border:0" data-act="room" data-id="'+c.roomId+'"><div class="grow"><b>'+esc(roomLabel(c))+'</b> · '+esc(ten.name||'')+'<div class="sub">'+ymLabel(x.ym)+' 월세 · 납부일 '+kd(x.s.dd)+'</div></div><div class="r"><b style="color:var(--red)">'+won(x.s.remain)+'</b><div><span class="chip c-late">'+x.s.days+'일 연체</span></div></div></div>'+
+        '<div class="acts"><button class="btn sm" data-act="pay" data-c="'+c.id+'" data-ym="'+x.ym+'">납부 등록</button>'+
+        (ten.phone?'<button class="btn sm line" data-act="smsLate" data-c="'+c.id+'" data-ym="'+x.ym+'">문자</button><button class="btn sm line" data-act="call" data-n="'+esc(ten.phone)+'">전화</button>':'')+'</div></div>';
+    });
+  }
+  var up=[];
+  db.contracts.filter(function(c){return c.status==='active';}).forEach(function(c){ allMonths(c).forEach(function(ym){ var s=mstat(c,ym); if(s.k!=='paid' && s.days<=0 && s.days>=-7) up.push({c:c,ym:ym,s:s}); }); });
+  up.sort(function(a,b){return a.s.dd<b.s.dd?-1:1;});
+  if(up.length){
+    h+='<h2>7일 안에 납부 예정 <span class="chip c-wait">'+up.length+'건</span></h2><div class="card flat">';
+    up.forEach(function(x){ var ten=byId(db.tenants,x.c.tenantId)||{};
+      h+='<div class="row tap" data-act="pay" data-c="'+x.c.id+'" data-ym="'+x.ym+'"><div class="grow"><b>'+esc(roomLabel(x.c))+'</b> · '+esc(ten.name||'')+'<div class="sub">'+kd(x.s.dd)+' · '+(x.s.days===0?'오늘':'D'+x.s.days)+'</div></div><div class="r"><b>'+man(x.s.remain)+'</b></div></div>'; });
+    h+='</div>';
+  }
+  var ex=db.contracts.filter(function(c){return c.status==='active' && diff(t,c.end)<=60;}).sort(function(a,b){return a.end<b.end?-1:1;});
+  if(ex.length){
+    h+='<h2>계약 만기 임박 <span class="chip c-part">'+ex.length+'건</span></h2><div class="card flat">';
+    ex.forEach(function(c){ var ten=byId(db.tenants,c.tenantId)||{};
+      h+='<div class="row tap" data-act="room" data-id="'+c.roomId+'"><div class="grow"><b>'+esc(roomLabel(c))+'</b> · '+esc(ten.name||'')+'<div class="sub">만기 '+kd(c.end)+'</div></div><div class="r"><span class="chip '+(diff(t,c.end)<0?'c-late':'c-part')+'">'+dday(c.end)+'</span></div></div>'; });
+    h+='</div>';
+  }
+  var vac=db.rooms.filter(function(r){return !activeOf(r.id);}).sort(function(a,b){return natcmp(a.name,b.name);});
+  if(vac.length){
+    h+='<h2>공실 <span class="chip c-vac">'+vac.length+'호실</span></h2><div class="card"><div style="display:flex;flex-wrap:wrap;gap:8px">'+vac.map(function(r){return '<button class="btn sm line" data-act="room" data-id="'+r.id+'">'+esc(r.name)+'</button>';}).join('')+'</div></div>';
+  }
+  if(!ar.length && !up.length && !ex.length) h+='<div class="empty">지금 처리할 알림이 없어요 👍</div>';
+  var lb=db.meta.lastBackup;
+  if(db.rooms.length && (!lb || diff(lb.slice(0,10),t)>=30)) h+='<div class="banner" data-act="backup" style="cursor:pointer">'+(lb?'마지막 백업이 30일 넘었어요.':'아직 백업한 적이 없어요.')+' 휴대폰을 바꾸거나 앱을 지우면 데이터가 사라져요. <b>지금 백업하기 ›</b></div>';
+  return h;
+}
+
+/* ───────── 호실 ───────── */
+function roomCard(r){
+  var c=activeOf(r.id), h='';
+  if(c){
+    var ten=byId(db.tenants,c.tenantId)||{}; var cur=today().slice(0,7);
+    var chip=''; if(allMonths(c).indexOf(cur)>=0){ var s=mstat(c,cur); chip='<span class="chip c-'+s.k+'">'+esc(s.l)+'</span>'; }
+    var late=arrears().filter(function(x){return x.c.id===c.id;}).length;
+    if(late>1) chip='<span class="chip c-late">미납 '+late+'개월</span>';
+    h='<div class="rcard tap" data-act="room" data-id="'+r.id+'"><div class="rname">'+esc(r.name)+'</div><div class="grow"><div><b>'+esc(ten.name||'')+'</b></div><div class="sub">월세 '+man(c.rent)+(n0(c.fee)?' + 관리비 '+man(c.fee):'')+'</div><div class="sub">만기 '+kd(c.end)+' · '+dday(c.end)+'</div></div><div class="r">'+chip+'</div></div>';
+  } else {
+    h='<div class="rcard tap" data-act="room" data-id="'+r.id+'"><div class="rname vac">'+esc(r.name)+'</div><div class="grow"><div class="sub">'+esc(r.kind||'')+'</div></div><div class="r"><span class="chip c-vac">공실</span></div></div>';
+  }
+  return h;
+}
+function viewRooms(){
+  if(!db.rooms.length) return '<div class="empty">아직 호실이 없어요.<br>아래 <b>＋ 호실 추가</b>를 눌러 시작하세요.<br><span class="sub">여러 호실을 쉼표로 구분해 한 번에 추가할 수 있어요.</span></div>';
+  var occ=db.rooms.filter(function(r){return activeOf(r.id);}).length;
+  var h='<div class="sub" style="margin:4px 2px">입주 '+occ+' · 공실 '+(db.rooms.length-occ)+'</div>';
+  var groups=db.props.slice(); var known={}; groups.forEach(function(p){known[p.id]=1;});
+  var orphan=db.rooms.filter(function(r){return !known[r.propId];});
+  groups.forEach(function(p){
+    var rs=db.rooms.filter(function(r){return r.propId===p.id;}).sort(function(a,b){return natcmp(a.name,b.name);});
+    if(!rs.length) return;
+    h+='<h2>'+esc(p.name)+(p.addr?' <span class="sub" style="font-weight:500">'+esc(p.addr)+'</span>':'')+'</h2>'+rs.map(roomCard).join('');
+  });
+  if(orphan.length) h+='<h2>기타</h2>'+orphan.sort(function(a,b){return natcmp(a.name,b.name);}).map(roomCard).join('');
+  return h;
+}
+
+function kv(k,v){ return v===''||v==null? '' : '<div class="kv"><span>'+k+'</span><span>'+v+'</span></div>'; }
+function statusChip(c){ return c.status==='active'?'<span class="chip c-act">입주중</span>':c.status==='renewed'?'<span class="chip c-end">갱신됨</span>':'<span class="chip c-end">퇴실</span>'; }
+
+function contractCard(c, mode){
+  var ten=byId(db.tenants,c.tenantId)||{name:'(삭제된 세입자)'};
+  var h='<div class="card"><div class="h"><span>'+(mode==='cur'?'현재 계약':'계약 정보')+' '+statusChip(c)+'</span><button class="ib txt" data-act="editContract" data-id="'+c.id+'">수정</button></div>';
+  h+='<div class="row tap" data-act="tenant" data-id="'+(ten.id||'')+'" style="padding-top:4px"><div class="av">'+esc((ten.name||'?').charAt(0))+'</div><div class="grow"><b>'+esc(ten.name)+'</b><div class="sub">'+esc(ten.phone||'연락처 없음')+'</div></div><span class="sub">›</span></div>';
+  if(ten.phone) h+='<div class="acts" style="margin:0 0 6px"><button class="btn sm line" data-act="call" data-n="'+esc(ten.phone)+'">전화</button><button class="btn sm line" data-act="sms" data-n="'+esc(ten.phone)+'">문자</button></div>';
+  h+=kv('보증금',n0(c.deposit)?won(c.deposit):'')+kv('월세',won(c.rent))+kv('관리비',won(c.fee))+kv('월 납부액','<b>'+won(n0(c.rent)+n0(c.fee))+'</b>')+
+     kv('계약일',kd(c.start))+kv('계약 만기',kd(c.end)+(c.status==='active'?' <span class="chip '+(diff(today(),c.end)<=60?'c-part':'c-wait')+'">'+dday(c.end)+'</span>':''))+kv('월세 납부일','매월 '+c.payDay+'일');
+  if(c.status!=='active') h+=kv('종료일',kd(c.endedOn))+(c.status==='ended'?kv('보증금 반환',c.depositReturned?'반환 완료':(n0(c.deposit)?'<span style="color:var(--red);font-weight:700">미반환</span>':'-')):'');
+  if(c.agency||c.agencyTel) h+=kv('중개사무소',esc(c.agency||'')+(c.agencyTel?' <button class="btn sm line" style="margin-left:6px" data-act="call" data-n="'+esc(c.agencyTel)+'">'+esc(c.agencyTel)+'</button>':''));
+  h+=kv('비고',nl(c.memo||''));
+  if(c.status==='active') h+='<div class="btns"><button class="btn ghost" data-act="renew" data-id="'+c.id+'">계약 갱신</button><button class="btn dng" data-act="endC" data-id="'+c.id+'">퇴실 처리</button></div>';
+  else if(c.status==='ended' && !activeOf(c.roomId)) h+='<div class="btns"><button class="btn ghost" data-act="reopen" data-id="'+c.id+'">퇴실 취소 (계약 재개)</button></div>';
+  return h+'</div>';
+}
+function monthRow(c,ym){
+  var s=mstat(c,ym), pays=payFor(c,ym);
+  var amt = s.k==='paid'? won(s.paid) : s.paid>0? won(s.paid)+' / '+won(s.due) : won(s.due);
+  return '<div class="row tap" data-act="pay" data-c="'+c.id+'" data-ym="'+ym+'"><div class="grow"><b>'+ymLabel(ym)+'</b><div class="sub">납부일 '+kd(s.dd)+(pays.length?' · 입금 '+pays.map(function(p){return kds(p.paidOn);}).join(', '):'')+'</div></div><div class="r"><span class="chip c-'+s.k+'">'+esc(s.l)+'</span><div class="sub">'+amt+'</div></div></div>';
+}
+function payListCard(c){
+  var ms=visibleMonths(c).slice().reverse();
+  var tot=0, late=0; allMonths(c).forEach(function(ym){ tot+=paidSum(c,ym); var s=mstat(c,ym); if(s.k!=='paid'&&s.days>0) late+=s.remain; });
+  return '<div class="card"><div class="h">납부 내역</div><div class="sub">누적 입금 '+won(tot)+(late?' · <b style="color:var(--red)">미납 '+won(late)+'</b>':'')+'<br>줄을 누르면 납부를 등록하거나 수정할 수 있어요.</div>'+(ms.length? ms.map(function(ym){return monthRow(c,ym);}).join('') : '<div class="empty">아직 청구된 달이 없어요</div>')+'</div>';
+}
+function notesCard(kind,id,notes,title,hint){
+  notes=notes||[];
+  var list=notes.slice().sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:0;}).map(function(n){
+    return '<div class="note" data-act="editNote" data-k="'+kind+'" data-id="'+id+'" data-n="'+n.id+'"><div class="grow"><div class="sub">'+kd(n.date)+'</div><div class="tx">'+esc(n.text)+'</div></div><span class="sub">✎</span></div>';
+  }).join('');
+  return '<div class="card"><div class="h">'+title+'</div><div class="sub">'+hint+'</div>'+(list||'<div class="empty">아직 기록이 없어요</div>')+
+    '<div class="addnote"><textarea id="nt_'+kind+'" rows="2" placeholder="특이사항을 입력하세요"></textarea><button class="btn sm" data-act="addNote" data-k="'+kind+'" data-id="'+id+'">추가</button></div></div>';
+}
+function viewRoom(r){
+  var c=activeOf(r.id), p=byId(db.props,r.propId), h='';
+  h+='<div class="card"><div class="sub">'+esc(p?p.name:'')+(p&&p.addr?' · '+esc(p.addr):'')+'</div><div class="big2">'+esc(r.name)+'</div>'+(r.kind?'<div class="sub">'+esc(r.kind)+'</div>':'')+(p&&p.account?kv('입금 계좌',esc(p.account)):'')+'</div>';
+  if(c){ h+=contractCard(c,'cur')+payListCard(c); }
+  else h+='<div class="card"><div class="h">공실 <span class="chip c-vac">입주자 없음</span></div><div class="sub">입주 계약을 등록하면 월세 납부 내역을 관리할 수 있어요.</div><div class="btns"><button class="btn" data-act="newContract" data-room="'+r.id+'">입주 계약 등록</button></div></div>';
+  h+=notesCard('room',r.id,r.notes,'호실 특이사항','세입자가 바뀌어도 이 호실에 계속 남는 기록이에요. (누수, 도배·장판, 수리 이력 등)');
+  var past=db.contracts.filter(function(x){return x.roomId===r.id && x.status!=='active';}).sort(function(a,b){return a.start<b.start?1:-1;});
+  if(past.length){
+    h+='<div class="card flat" style="margin-top:14px"><div class="h" style="padding-top:12px">이전 계약 이력</div>'+past.map(function(x){ var t=byId(db.tenants,x.tenantId)||{name:'(삭제됨)'};
+      return '<div class="row tap" data-act="contract" data-id="'+x.id+'"><div class="grow"><b>'+esc(t.name)+'</b><div class="sub">'+kd(x.start)+' ~ '+kd(x.endedOn||x.end)+'</div></div><div class="r">'+statusChip(x)+'</div></div>'; }).join('')+'</div>';
+  }
+  return h;
+}
+function viewContract(c){
+  return contractCard(c,'')+payListCard(c);
+}
+
+/* ───────── 세입자 ───────── */
+function viewTenants(){
+  if(!db.tenants.length) return '<div class="empty">등록된 세입자가 없어요.<br>호실에서 입주 계약을 등록하면 함께 추가돼요.</div>';
+  var rows=db.tenants.map(function(t){ var cs=db.contracts.filter(function(c){return c.tenantId===t.id;}); var a=cs.filter(function(c){return c.status==='active';})[0]; return {t:t,a:a,n:cs.length}; })
+    .sort(function(x,y){ if(!!x.a!==!!y.a) return x.a?-1:1; return natcmp(x.t.name,y.t.name); });
+  var h='<input class="search" id="q" placeholder="이름·전화번호 검색">';
+  h+='<div class="card flat" id="tlist">'+rows.map(function(x){
+    var t=x.t, room=x.a? roomLabel(x.a):'';
+    return '<div class="row tap" data-act="tenant" data-id="'+t.id+'" data-s="'+esc((t.name+' '+(t.phone||'')+' '+(t.guardian||'')+' '+room).toLowerCase())+'"><div class="av">'+esc(t.name.charAt(0))+'</div><div class="grow"><b>'+esc(t.name)+'</b><div class="sub">'+esc(t.phone||'연락처 없음')+'</div></div><div class="r">'+(x.a?'<span class="chip c-act">'+esc(room)+'</span>':'<span class="chip c-end">'+(x.n?'퇴실':'계약 없음')+'</span>')+'</div></div>';
+  }).join('')+'</div>';
+  return h;
+}
+function viewTenant(t){
+  var h='<div class="card"><div class="row" style="padding-top:2px;border:0"><div class="av" style="width:48px;height:48px;font-size:19px">'+esc(t.name.charAt(0))+'</div><div class="grow"><div class="big2" style="font-size:22px">'+esc(t.name)+'</div><div class="sub">'+esc(t.phone||'연락처 없음')+'</div></div></div>';
+  if(t.phone) h+='<div class="acts" style="margin-bottom:6px"><button class="btn sm line" data-act="call" data-n="'+esc(t.phone)+'">전화</button><button class="btn sm line" data-act="sms" data-n="'+esc(t.phone)+'">문자</button></div>';
+  h+=kv('실거주자',esc(t.resident||''))+kv('직장/학교',esc(t.job||''))+kv('차량번호',esc(t.car||''));
+  if(t.guardian||t.guardianPhone) h+=kv('보호자',esc(t.guardian||'')+(t.guardianRel?' ('+esc(t.guardianRel)+')':'')+(t.guardianPhone?'<div style="margin-top:4px"><button class="btn sm line" data-act="call" data-n="'+esc(t.guardianPhone)+'">'+esc(t.guardianPhone)+'</button></div>':''));
+  h+='</div>';
+  var cs=db.contracts.filter(function(c){return c.tenantId===t.id;}).sort(function(a,b){return a.start<b.start?1:-1;});
+  h+='<div class="card flat"><div class="h" style="padding-top:12px">계약 이력</div>'+(cs.length? cs.map(function(c){
+    return '<div class="row tap" data-act="contract" data-id="'+c.id+'"><div class="grow"><b>'+esc(roomLabel(c))+'</b><div class="sub">'+kd(c.start)+' ~ '+kd(c.status==='active'?c.end:(c.endedOn||c.end))+'</div></div><div class="r">'+statusChip(c)+'<div class="sub">'+man(c.rent)+'</div></div></div>';
+  }).join('') : '<div class="empty">계약 이력이 없어요</div>')+'</div>';
+  h+=notesCard('tenant',t.id,t.notes,'세입자 특이사항','이 사람에 대한 기록이에요. (성격, 연체 습관, 요청사항 등)');
+  return h;
+}
+
+/* ───────── 납부 ───────── */
+function viewPay(){
+  var ym=pf.ym, rows=[];
+  db.contracts.forEach(function(c){ if(allMonths(c).indexOf(ym)>=0) rows.push({c:c,s:mstat(c,ym)}); });
+  rows.sort(function(a,b){ return natcmp(roomLabel(a.c),roomLabel(b.c)); });
+  var bill=0,paid=0; rows.forEach(function(x){ bill+=x.s.due; paid+=Math.min(x.s.paid,x.s.due); });
+  var h='<div class="mnav"><button class="ib" data-act="mon" data-n="-1">◀</button><b>'+ymLabel(ym)+'</b><button class="ib" data-act="mon" data-n="1">▶</button></div>';
+  h+='<div class="card"><div class="sub">수금 / 청구</div><div class="big">'+won(paid)+' <span>/ '+won(bill)+'</span></div><div class="bar"><i style="width:'+(bill?Math.round(paid/bill*100):0)+'%"></i></div><div class="sub">남은 금액 '+won(bill-paid)+'</div></div>';
+  h+='<div class="seg">'+[['all','전체'],['unpaid','미납·예정'],['paid','완납']].map(function(f){return '<button class="'+(pf.filter===f[0]?'on':'')+'" data-act="pfilter" data-f="'+f[0]+'">'+f[1]+'</button>';}).join('')+'</div>';
+  var list=rows.filter(function(x){ return pf.filter==='all' || (pf.filter==='paid'? x.s.k==='paid' : x.s.k!=='paid'); });
+  if(!list.length) return h+'<div class="empty">'+(rows.length?'해당하는 항목이 없어요':'이 달에 청구되는 계약이 없어요')+'</div>';
+  h+='<div class="card flat">'+list.map(function(x){ var ten=byId(db.tenants,x.c.tenantId)||{};
+    var pays=payFor(x.c,ym);
+    return '<div class="row tap" data-act="pay" data-c="'+x.c.id+'" data-ym="'+ym+'"><div class="grow"><b>'+esc(roomLabel(x.c))+'</b> · '+esc(ten.name||'')+'<div class="sub">납부일 '+kd(x.s.dd)+(pays.length?' · 입금 '+pays.map(function(p){return kds(p.paidOn);}).join(', '):'')+'</div></div><div class="r"><span class="chip c-'+x.s.k+'">'+esc(x.s.l)+'</span><div class="sub">'+(x.s.paid>0&&x.s.k!=='paid'? won(x.s.paid)+' / ':'')+won(x.s.k==='paid'?x.s.paid:x.s.due)+'</div></div></div>'; }).join('')+'</div>';
+  return h;
+}
+
+/* ───────── 더보기 ───────── */
+function viewMore(){
+  return '<div class="card flat menu">'+
+   '<div class="row tap" data-act="props"><div class="grow"><b>건물 관리</b><div class="sub">건물명, 주소, 입금 계좌</div></div><span class="sub">›</span></div>'+
+   '<div class="row tap" data-act="stats"><div class="grow"><b>월별 수입</b><div class="sub">월별로 받은 월세 합계</div></div><span class="sub">›</span></div>'+
+   '<div class="row tap" data-act="backup"><div class="grow"><b>백업 · 복원</b><div class="sub">데이터 내보내기 / 불러오기</div></div><span class="sub">›</span></div></div>'+
+   '<div class="sub" style="text-align:center;margin-top:18px">월세 관리 v1.0 · 모든 데이터는 이 휴대폰에만 저장돼요</div>';
+}
+function viewProps(){
+  if(!db.props.length) return '<div class="empty">등록된 건물이 없어요.<br>호실을 추가하면 기본 건물이 자동으로 만들어져요.</div>';
+  return '<div class="card flat">'+db.props.map(function(p){ var n=db.rooms.filter(function(r){return r.propId===p.id;}).length;
+    return '<div class="row tap" data-act="editProp" data-id="'+p.id+'"><div class="grow"><b>'+esc(p.name)+'</b><div class="sub">'+esc(p.addr||'주소 없음')+(p.account?' · '+esc(p.account):'')+'</div></div><div class="r"><span class="chip c-wait">'+n+'호실</span></div></div>'; }).join('')+'</div>';
+}
+function viewStats(){
+  var y=pf.year, mon=[]; for(var i=0;i<12;i++) mon.push(0);
+  db.payments.forEach(function(p){ if(p.paidOn && p.paidOn.slice(0,4)==String(y)) mon[Number(p.paidOn.slice(5,7))-1]+=n0(p.amount); });
+  var max=Math.max.apply(null,mon.concat([1])), tot=mon.reduce(function(a,b){return a+b;},0);
+  var h='<div class="mnav"><button class="ib" data-act="yr" data-n="-1">◀</button><b>'+y+'년</b><button class="ib" data-act="yr" data-n="1">▶</button></div>';
+  h+='<div class="card"><div class="sub">연간 입금 합계</div><div class="big">'+won(tot)+'</div>'+mon.map(function(v,i){ return '<div class="mb"><span class="lb">'+(i+1)+'월</span><span class="tr"><i style="width:'+Math.round(v/max*100)+'%"></i></span><span class="vl">'+(v?won(v):'-')+'</span></div>'; }).join('')+'</div>';
+  var ar=arrears(); var tt=ar.reduce(function(s,x){return s+x.s.remain;},0);
+  h+='<div class="card"><div class="sub">현재 누적 미납액</div><div class="big" style="color:'+(tt?'var(--red)':'var(--ink)')+'">'+won(tt)+'</div><div class="sub">'+ar.length+'건</div></div>';
+  return h;
+}
+function backupJson(){ return JSON.stringify({app:'rentapp',version:1,exported:new Date().toISOString(),data:db}); }
+function viewBackup(){
+  var lb=db.meta.lastBackup;
+  return '<div class="card"><div class="sub">저장된 데이터</div><div class="kv"><span>건물</span><span>'+db.props.length+'</span></div><div class="kv"><span>호실</span><span>'+db.rooms.length+'</span></div><div class="kv"><span>세입자</span><span>'+db.tenants.length+'</span></div><div class="kv"><span>계약</span><span>'+db.contracts.length+'</span></div><div class="kv"><span>납부 기록</span><span>'+db.payments.length+'</span></div><div class="kv"><span>마지막 백업</span><span>'+(lb? kd(lb.slice(0,10)):'없음')+'</span></div></div>'+
+   '<div class="card"><div class="h">백업하기</div><div class="sub">백업 내용을 카카오톡(나에게 보내기), 메일, 드라이브 등으로 보내 보관하세요.</div><div class="btns"><button class="btn" data-act="doShare">공유로 내보내기</button><button class="btn ghost" data-act="doCopy">복사</button></div></div>'+
+   '<div class="card"><div class="h">복원하기</div><div class="sub">백업해 둔 내용을 아래에 붙여넣고 복원을 누르세요. 현재 데이터는 모두 바뀌어요.</div><textarea id="rest" rows="4" style="margin-top:8px" placeholder="여기에 붙여넣기"></textarea><div class="btns"><button class="btn" data-act="doRestore">복원</button></div></div>'+
+   '<div class="card"><div class="h">전체 삭제</div><div class="sub">모든 데이터를 지우고 처음 상태로 되돌려요.</div><div class="btns"><button class="btn dng" style="flex:1" data-act="doWipe">전체 데이터 삭제</button></div></div>';
+}
+
+/* ───────── 모달 / 폼 ───────── */
+function openSheet(html,onMount){
+  var bg=document.createElement('div'); bg.className='sheet-bg';
+  bg.innerHTML='<div class="sheet">'+html+'</div>';
+  bg.addEventListener('click',function(e){ if(e.target===bg) closeSheet(); });
+  document.body.appendChild(bg); modals.push(bg);
+  if(onMount) onMount(bg.firstChild);
+  return bg;
+}
+function closeSheet(){ var m=modals.pop(); if(m) m.remove(); }
+function confirmBox(msg,yes,onYes,sub){
+  openSheet('<h3>'+esc(msg)+'</h3>'+(sub?'<div class="sub">'+sub+'</div>':'')+'<div class="btns"><button class="btn ghost" data-f="no">취소</button><button class="btn dng" style="flex:1" data-f="yes">'+esc(yes)+'</button></div>',function(sh){
+    sh.addEventListener('click',function(e){ var f=e.target.getAttribute&&e.target.getAttribute('data-f'); if(f==='no') closeSheet(); if(f==='yes'){ closeSheet(); onYes(); } });
+  });
+}
+function fieldHtml(f,v){
+  var val = v[f.k]!=null? v[f.k] : (f.def!=null? f.def : '');
+  var id='f_'+f.k, req=f.req?' <em>*</em>':'', si=f.showIf? ' data-si="'+f.showIf[0]+'='+f.showIf[1]+'"':'';
+  var hint=f.hint? '<div class="hint">'+f.hint+'</div>':'';
+  if(f.type==='check') return '<label class="fl chk" id="w_'+f.k+'"'+si+'><input type="checkbox" id="'+id+'" '+(val?'checked':'')+'><span>'+f.l+'</span></label>';
+  var inner;
+  if(f.type==='select') inner='<select id="'+id+'">'+f.opts.map(function(o){return '<option value="'+esc(o[0])+'"'+(String(o[0])===String(val)?' selected':'')+'>'+esc(o[1])+'</option>';}).join('')+'</select>';
+  else if(f.type==='textarea') inner='<textarea id="'+id+'" rows="3" placeholder="'+esc(f.ph||'')+'">'+esc(val)+'</textarea>';
+  else if(f.type==='money') inner='<input id="'+id+'" data-t="money" inputmode="numeric" placeholder="'+esc(f.ph||'0')+'" value="'+(val===''||val==null?'':Number(val).toLocaleString('ko-KR'))+'">';
+  else if(f.type==='tel') inner='<input id="'+id+'" data-t="tel" inputmode="tel" placeholder="010-0000-0000" value="'+esc(val)+'">';
+  else if(f.type==='date') inner='<input id="'+id+'" type="date" value="'+esc(val)+'">';
+  else inner='<input id="'+id+'" type="text" placeholder="'+esc(f.ph||'')+'" value="'+esc(val)+'">';
+  return '<label class="fl" id="w_'+f.k+'"'+si+'><span>'+f.l+req+'</span>'+inner+hint+'</label>';
+}
+function openForm(o){
+  var vals=o.values||{};
+  var html='<h3>'+esc(o.title)+'</h3>'+(o.sub?'<div class="sub">'+o.sub+'</div>':'')+(o.pre||'')+o.fields.map(function(f){return fieldHtml(f,vals);}).join('')+
+    '<div class="btns">'+(o.onDelete?'<button class="btn dng" data-f="del">'+(o.delLabel||'삭제')+'</button>':'')+'<button class="btn ghost" data-f="cancel">취소</button><button class="btn" data-f="save">'+(o.saveLabel||'저장')+'</button></div>';
+  openSheet(html,function(sh){
+    function el(k){ return sh.querySelector('#f_'+k); }
+    function upd(){ sh.querySelectorAll('[data-si]').forEach(function(w){ var p=w.getAttribute('data-si').split('='); var e=el(p[0]); w.classList.toggle('hidden', !(e && e.value===p[1])); }); }
+    function read(){
+      var out={};
+      for(var i=0;i<o.fields.length;i++){
+        var f=o.fields[i], e=el(f.k), w=sh.querySelector('#w_'+f.k), hid=w&&w.classList.contains('hidden');
+        var v;
+        if(f.type==='check') v=e.checked; else if(f.type==='money') v=parseInt(digits(e.value)||'0',10); else v=e.value.trim();
+        if(f.req && !hid && (v===''||(f.type==='money'&&!v&&f.reqPos))){ toast(f.l+'을(를) 입력해 주세요'); e.focus(); return null; }
+        out[f.k]=hid && f.showIf ? (f.type==='money'?0:'') : v;
+      }
+      return out;
+    }
+    sh.addEventListener('change',function(e){ upd(); if(o.onChange) o.onChange(e,el); });
+    sh.addEventListener('click',function(e){
+      var fn=e.target.getAttribute&&e.target.getAttribute('data-f');
+      if(fn==='cancel') closeSheet();
+      else if(fn==='save'){ var r=read(); if(!r) return; if(o.onSave(r)!==false) closeSheet(); }
+      else if(fn==='del'){ o.onDelete(); }
+    });
+    upd();
+  });
+}
+document.addEventListener('input',function(e){
+  var t=e.target; if(!t||!t.dataset) return;
+  if(t.dataset.t==='money'){ var d=digits(t.value); t.value=d? Number(d).toLocaleString('ko-KR'):''; }
+  else if(t.dataset.t==='tel'){ t.value=fmtPhone(t.value); }
+  else if(t.id==='q'){ var q=t.value.trim().toLowerCase(); document.querySelectorAll('#tlist [data-s]').forEach(function(r){ r.classList.toggle('hidden', q && r.getAttribute('data-s').indexOf(q)<0); }); }
+});
+
+/* ───────── 폼: 건물 / 호실 / 세입자 / 계약 / 납부 ───────── */
+function propForm(id){
+  var p=id? byId(db.props,id) : null;
+  openForm({title:p?'건물 수정':'건물 추가',values:p||{},fields:[
+    {k:'name',l:'건물 이름',req:1,ph:'예: 행복빌라'},
+    {k:'addr',l:'주소'},
+    {k:'account',l:'월세 입금 계좌',ph:'은행 계좌번호 (예금주)'},
+    {k:'memo',l:'건물 메모',type:'textarea'}],
+    onSave:function(v){ if(p) Object.assign(p,v); else db.props.push(Object.assign({id:uid()},v)); save(); render(); toast('저장했어요'); },
+    onDelete:p? function(){ if(db.rooms.some(function(r){return r.propId===p.id;})){ toast('호실이 있는 건물은 삭제할 수 없어요'); return; } closeSheet(); db.props=db.props.filter(function(x){return x!==p;}); save(); render(); toast('삭제했어요'); } : null});
+}
+function ensureProp(){
+  if(!db.props.length){ db.props.push({id:uid(),name:'내 건물',addr:'',account:'',memo:''}); }
+  return db.props[0].id;
+}
+function roomForm(id){
+  var r=id? byId(db.rooms,id) : null;
+  var fields=[];
+  if(db.props.length>1) fields.push({k:'propId',l:'건물',type:'select',opts:db.props.map(function(p){return [p.id,p.name];})});
+  fields.push({k:'name',l:r?'호실 이름':'호실 이름',req:1,ph:'예: 301호',hint:r?'':'여러 호실은 쉼표(,)로 구분해 한 번에 추가할 수 있어요. 예: 101, 102, 201'});
+  fields.push({k:'kind',l:'구조 / 설명',ph:'예: 원룸, 투룸, 복층 (선택)'});
+  openForm({title:r?'호실 수정':'호실 추가',values:r||{propId:db.props[0]&&db.props[0].id},fields:fields,
+    onSave:function(v){
+      if(r){ Object.assign(r,{name:v.name,kind:v.kind}); if(v.propId) r.propId=v.propId; save(); render(); toast('저장했어요'); return; }
+      var pid=v.propId||ensureProp(); var names=v.name.split(/[,\n，]+/).map(function(s){return s.trim();}).filter(Boolean);
+      names.forEach(function(n){ db.rooms.push({id:uid(),propId:pid,name:n,kind:v.kind,notes:[]}); });
+      save(); render(); toast(names.length+'개 호실을 추가했어요');
+    },
+    onDelete:r? function(){ closeSheet(); confirmBox('"'+r.name+'" 호실을 삭제할까요?','삭제',function(){
+      var cids=db.contracts.filter(function(c){return c.roomId===r.id;}).map(function(c){return c.id;});
+      db.payments=db.payments.filter(function(p){return cids.indexOf(p.contractId)<0;});
+      db.contracts=db.contracts.filter(function(c){return c.roomId!==r.id;});
+      db.rooms=db.rooms.filter(function(x){return x!==r;});
+      save(); nav.stack=[]; render(true); toast('삭제했어요'); },'이 호실의 계약과 납부 기록, 호실 특이사항도 함께 삭제돼요.'); } : null});
+}
+var TFIELDS=[
+  {k:'name',l:'계약자(세입자) 이름',req:1},
+  {k:'phone',l:'전화번호',type:'tel'},
+  {k:'resident',l:'실거주자',ph:'계약자와 다른 경우만'},
+  {k:'guardian',l:'보호자 이름'},
+  {k:'guardianRel',l:'보호자 관계',ph:'예: 부, 모, 배우자'},
+  {k:'guardianPhone',l:'보호자 전화번호',type:'tel'},
+  {k:'job',l:'직장 / 학교'},
+  {k:'car',l:'차량번호'}];
+function tenantForm(id){
+  var t=id? byId(db.tenants,id) : null;
+  openForm({title:t?'세입자 수정':'세입자 추가',values:t||{},fields:TFIELDS,
+    onSave:function(v){ if(t) Object.assign(t,v); else db.tenants.push(Object.assign({id:uid(),notes:[]},v)); save(); render(); toast('저장했어요'); },
+    onDelete:t? function(){
+      if(db.contracts.some(function(c){return c.tenantId===t.id;})){ toast('계약 이력이 있는 세입자는 삭제할 수 없어요'); return; }
+      closeSheet(); db.tenants=db.tenants.filter(function(x){return x!==t;}); save(); nav.stack=[]; render(true); toast('삭제했어요'); } : null});
+}
+function payDayOpts(){ var o=[]; for(var i=1;i<=31;i++) o.push([String(i),'매월 '+i+'일']); return o; }
+function contractForm(pre,cid){
+  var c=cid? byId(db.contracts,cid) : null;
+  var roomId=c? c.roomId : pre.roomId;
+  var tens=db.tenants.slice().sort(function(a,b){return natcmp(a.name,b.name);});
+  var tOpts=[['new','＋ 새 세입자 등록']].concat(tens.map(function(t){return [t.id,t.name+(t.phone?' ('+t.phone+')':'')];}));
+  var t0=today();
+  var vals=c? Object.assign({},c,{payDay:String(c.payDay)}) : {tenantId:pre.tenantId||(tens.length?'new':'new'),start:t0,end:yearLater(t0),payDay:String(pd(t0).getDate())};
+  if(!c && pre.tenantId) vals.tenantId=pre.tenantId;
+  var fields=[
+    {k:'tenantId',l:'세입자',type:'select',opts:tOpts},
+    {k:'nName',l:'새 세입자 이름',req:1,showIf:['tenantId','new']},
+    {k:'nPhone',l:'전화번호',type:'tel',showIf:['tenantId','new']},
+    {k:'nGuardian',l:'보호자 이름',showIf:['tenantId','new']},
+    {k:'nGuardianPhone',l:'보호자 전화번호',type:'tel',showIf:['tenantId','new']},
+    {k:'deposit',l:'보증금 (원)',type:'money'},
+    {k:'rent',l:'월세 (원)',type:'money',req:1},
+    {k:'fee',l:'관리비 (원)',type:'money'},
+    {k:'start',l:'계약일 (입주 시작)',type:'date',req:1},
+    {k:'end',l:'계약 만기일',type:'date',req:1},
+    {k:'payDay',l:'월세 납부일',type:'select',opts:payDayOpts()},
+    {k:'agency',l:'부동산(중개사무소)',ph:'상호 / 담당자'},
+    {k:'agencyTel',l:'부동산 전화번호',type:'tel'},
+    {k:'memo',l:'비고 (계약 관련)',type:'textarea',ph:'특약사항, 입금자명 등'}];
+  if(c && c.status==='ended') fields.push({k:'depositReturned',l:'보증금 반환 완료',type:'check'});
+  var endTouched=!!c, dayTouched=!!c;
+  openForm({title:c?'계약 수정':'입주 계약 등록',sub:esc((byId(db.rooms,roomId)||{}).name||'')+' 호실',values:vals,fields:fields,
+    onChange:function(e,el){
+      var id=e.target.id;
+      if(id==='f_end') endTouched=true;
+      if(id==='f_payDay') dayTouched=true;
+      if(id==='f_start' && e.target.value){
+        if(!endTouched) el('end').value=yearLater(e.target.value);
+        if(!dayTouched) el('payDay').value=String(pd(e.target.value).getDate());
+      }
+    },
+    onSave:function(v){
+      if(v.end<v.start){ toast('만기일이 계약일보다 빨라요'); return false; }
+      var tid=v.tenantId;
+      if(tid==='new'){
+        var nt={id:uid(),name:v.nName,phone:v.nPhone,guardian:v.nGuardian,guardianPhone:v.nGuardianPhone,notes:[]};
+        db.tenants.push(nt); tid=nt.id;
+      }
+      var data={tenantId:tid,deposit:v.deposit,rent:v.rent,fee:v.fee,start:v.start,end:v.end,payDay:Number(v.payDay),agency:v.agency,agencyTel:v.agencyTel,memo:v.memo};
+      if(c){ Object.assign(c,data); if(c.status==='ended') c.depositReturned=!!v.depositReturned; }
+      else { if(activeOf(roomId)){ toast('이미 입주 중인 계약이 있어요'); return false; } db.contracts.push(Object.assign({id:uid(),roomId:roomId,status:'active',endedOn:null,depositReturned:false},data)); }
+      save(); render(); toast('저장했어요');
+    },
+    onDelete:c? function(){ closeSheet(); confirmBox('이 계약을 삭제할까요?','삭제',function(){
+      db.payments=db.payments.filter(function(p){return p.contractId!==c.id;});
+      db.contracts=db.contracts.filter(function(x){return x!==c;});
+      save(); nav.stack=nav.stack.filter(function(s){return !(s.t==='contract'&&s.id===c.id);}); render(true); toast('삭제했어요'); },'이 계약의 납부 기록도 함께 삭제돼요.'); } : null});
+}
+function endForm(c){
+  openForm({title:'퇴실 처리',sub:'퇴실일 이후의 월세는 청구되지 않아요.',values:{endedOn:today(),depositReturned:false},fields:[
+    {k:'endedOn',l:'퇴실일',type:'date',req:1},
+    {k:'depositReturned',l:'보증금 반환 완료',type:'check'}],saveLabel:'퇴실 처리',
+    onSave:function(v){ c.status='ended'; c.endedOn=v.endedOn; c.depositReturned=!!v.depositReturned; save(); render(); toast('퇴실 처리했어요'); }});
+}
+function renewForm(c){
+  var ns=addD(c.end,1);
+  openForm({title:'계약 갱신',sub:'기존 계약은 "갱신됨"으로 보관되고, 새 계약이 만들어져요.',values:{start:ns,end:yearLater(ns),deposit:c.deposit,rent:c.rent,fee:c.fee},fields:[
+    {k:'start',l:'새 계약 시작일',type:'date',req:1},
+    {k:'end',l:'새 계약 만기일',type:'date',req:1},
+    {k:'deposit',l:'보증금 (원)',type:'money'},
+    {k:'rent',l:'월세 (원)',type:'money',req:1},
+    {k:'fee',l:'관리비 (원)',type:'money'}],saveLabel:'갱신',
+    onChange:function(e,el){ if(e.target.id==='f_start' && e.target.value) el('end').value=yearLater(e.target.value); },
+    onSave:function(v){
+      if(v.end<v.start){ toast('만기일이 시작일보다 빨라요'); return false; }
+      c.status='renewed'; c.endedOn=c.end;
+      db.contracts.push({id:uid(),roomId:c.roomId,tenantId:c.tenantId,status:'active',endedOn:null,depositReturned:false,deposit:v.deposit,rent:v.rent,fee:v.fee,start:v.start,end:v.end,payDay:c.payDay,agency:c.agency,agencyTel:c.agencyTel,memo:c.memo});
+      save(); render(); toast('갱신했어요'); }});
+}
+function openPay(cid,ym){
+  var c=byId(db.contracts,cid); if(!c) return;
+  var s=mstat(c,ym), pays=payFor(c,ym), t=byId(db.tenants,c.tenantId)||{}, r=byId(db.rooms,c.roomId)||{};
+  var pre='<div class="sub">'+esc(t.name||'')+' · '+ymLabel(ym)+' 월세 · 납부일 '+kd(s.dd)+'</div>'+
+    '<div class="card" style="margin:12px 0 4px"><div class="kv"><span>청구 금액</span><span>'+won(s.due)+' <span class="sub">(월세 '+won(c.rent)+(n0(c.fee)?' + 관리비 '+won(c.fee):'')+')</span></span></div><div class="kv"><span>입금 합계</span><span>'+won(s.paid)+'</span></div><div class="kv"><span>남은 금액</span><span><b style="color:'+(s.remain?'var(--red)':'var(--pri)')+'">'+won(s.remain)+'</b></span></div></div>'+
+    (pays.length? '<div class="sub" style="margin-top:12px;font-weight:700">입금 내역</div>'+pays.map(function(p){ return '<div class="row" style="padding:8px 0"><div class="grow"><b>'+kd(p.paidOn)+'</b><div class="sub">'+esc(p.memo||'')+'</div></div><b>'+won(p.amount)+'</b><button class="ib sm" data-act="delPay" data-id="'+p.id+'" data-c="'+cid+'" data-ym="'+ym+'">✕</button></div>'; }).join('') : '');
+  openForm({title:esc(r.name||'')+' 납부 등록',pre:pre,values:{paidOn:today(),amount:s.remain||''},fields:[
+    {k:'paidOn',l:'납부(입금)한 날짜',type:'date',req:1},
+    {k:'amount',l:'입금 금액 (원)',type:'money',req:1,reqPos:1},
+    {k:'memo',l:'메모',ph:'예: 계좌이체, 현금, 입금자명'}],saveLabel:pays.length?'추가 입금 등록':'납부 등록',
+    onSave:function(v){ db.payments.push({id:uid(),contractId:cid,ym:ym,paidOn:v.paidOn,amount:v.amount,memo:v.memo}); save(); render(); toast('납부를 등록했어요'); }});
+}
+function noteForm(kind,id,nid){
+  var owner=byId(kind==='room'?db.rooms:db.tenants,id); if(!owner) return;
+  var n=(owner.notes||[]).filter(function(x){return x.id===nid;})[0]; if(!n) return;
+  openForm({title:'기록 수정',values:n,fields:[{k:'date',l:'날짜',type:'date',req:1},{k:'text',l:'내용',type:'textarea',req:1}],
+    onSave:function(v){ n.date=v.date; n.text=v.text; save(); render(); },
+    onDelete:function(){ closeSheet(); owner.notes=owner.notes.filter(function(x){return x!==n;}); save(); render(); toast('삭제했어요'); }});
+}
+
+/* ───────── 동작 ───────── */
+var acts={
+  tab:function(d){ setTab(d.t); },
+  back:function(){ window.__back(); },
+  room:function(d){ go({t:'room',id:d.id}); },
+  tenant:function(d){ if(d.id) go({t:'tenant',id:d.id}); },
+  contract:function(d){ go({t:'contract',id:d.id}); },
+  props:function(){ go({t:'props'}); },
+  stats:function(){ go({t:'stats'}); },
+  backup:function(){ go({t:'backup'}); },
+  addRoom:function(){ roomForm(); },
+  editRoom:function(d){ roomForm(d.id); },
+  addTenant:function(){ tenantForm(); },
+  editTenant:function(d){ tenantForm(d.id); },
+  addProp:function(){ propForm(); },
+  editProp:function(d){ propForm(d.id); },
+  newContract:function(d){ contractForm({roomId:d.room}); },
+  editContract:function(d){ contractForm(null,d.id); },
+  renew:function(d){ renewForm(byId(db.contracts,d.id)); },
+  endC:function(d){ endForm(byId(db.contracts,d.id)); },
+  reopen:function(d){ var c=byId(db.contracts,d.id); if(activeOf(c.roomId)){ toast('이미 입주 중인 계약이 있어요'); return; } c.status='active'; c.endedOn=null; save(); render(); toast('계약을 다시 시작했어요'); },
+  pay:function(d){ openPay(d.c,d.ym); },
+  delPay:function(d){ confirmBox('이 입금 내역을 삭제할까요?','삭제',function(){ db.payments=db.payments.filter(function(p){return p.id!==d.id;}); save(); closeSheet(); render(); openPay(d.c,d.ym); }); },
+  addNote:function(d){
+    var ta=document.getElementById('nt_'+d.k); var v=ta&&ta.value.trim(); if(!v){ toast('내용을 입력해 주세요'); return; }
+    var o=byId(d.k==='room'?db.rooms:db.tenants,d.id); if(!o.notes) o.notes=[];
+    o.notes.push({id:uid(),date:today(),text:v}); save(); render(); toast('기록을 추가했어요');
+  },
+  editNote:function(d){ noteForm(d.k,d.id,d.n); },
+  call:function(d){ openUri('tel:'+digits(d.n)); },
+  sms:function(d){ openUri('sms:'+digits(d.n)); },
+  smsLate:function(d){
+    var c=byId(db.contracts,d.c), t=byId(db.tenants,c.tenantId)||{}, r=byId(db.rooms,c.roomId)||{}, p=byId(db.props,r.propId)||{};
+    var s=mstat(c,d.ym);
+    var body='['+(p.name?p.name+' ':'')+r.name+'] '+t.name+'님, '+ymLabel(d.ym)+' 월세 '+won(s.remain)+'이 아직 확인되지 않았습니다. 확인 부탁드립니다.'+(p.account?' 입금계좌: '+p.account:'');
+    openUri('sms:'+digits(t.phone)+'?body='+encodeURIComponent(body));
+  },
+  mon:function(d){ pf.ym=addM(pf.ym,Number(d.n)); render(true); },
+  yr:function(d){ pf.year+=Number(d.n); render(true); },
+  pfilter:function(d){ pf.filter=d.f; render(); },
+  doShare:function(){ var j=backupJson(); db.meta.lastBackup=new Date().toISOString(); save(); if(A&&A.share){ A.share(j); } else { copyText(j); toast('브라우저에서는 복사만 돼요'); } render(); },
+  doCopy:function(){ var j=backupJson(); if(copyText(j)){ db.meta.lastBackup=new Date().toISOString(); save(); toast('백업 내용을 복사했어요. 메모나 메신저에 붙여넣어 보관하세요'); render(); } else toast('복사에 실패했어요. "공유로 내보내기"를 이용해 주세요'); },
+  doRestore:function(){
+    var ta=document.getElementById('rest'); var txt=ta&&ta.value.trim(); if(!txt){ toast('백업 내용을 붙여넣어 주세요'); return; }
+    var d; try{ d=JSON.parse(txt); }catch(e){ toast('백업 형식이 올바르지 않아요'); return; }
+    var data=d&&d.data? d.data : d;
+    if(!data||!Array.isArray(data.rooms)||!Array.isArray(data.contracts)||!Array.isArray(data.payments)||!Array.isArray(data.tenants)){ toast('백업 형식이 올바르지 않아요'); return; }
+    confirmBox('현재 데이터를 백업 내용으로 바꿀까요?','복원',function(){ db=Object.assign(blank(),data); if(!db.meta) db.meta={}; save(); nav.stack=[]; nav.tab='home'; render(true); toast('복원했어요'); },'지금 저장된 데이터는 사라져요.');
+  },
+  doWipe:function(){ confirmBox('모든 데이터를 삭제할까요?','전체 삭제',function(){ confirmBox('정말 삭제할까요? 되돌릴 수 없어요.','네, 삭제합니다',function(){ db=blank(); save(); nav.stack=[]; nav.tab='home'; render(true); toast('삭제했어요'); }); },'백업하지 않았다면 복구할 수 없어요.'); }
+};
+document.addEventListener('click',function(e){
+  var el=e.target.closest&&e.target.closest('[data-act]'); if(!el) return;
+  var fn=acts[el.getAttribute('data-act')]; if(!fn) return;
+  e.stopPropagation();
+  fn(el.dataset,el);
+});
+
+/* ───────── 뒤로가기 ───────── */
+var lastBack=0;
+window.__back=function(){
+  if(modals.length){ closeSheet(); return; }
+  if(nav.stack.length){ nav.stack.pop(); render(true); return; }
+  if(nav.tab!=='home'){ setTab('home'); return; }
+  var now=Date.now();
+  if(now-lastBack<2000){ if(A&&A.exit) A.exit(); return; }
+  lastBack=now; toast('한 번 더 누르면 종료돼요');
+};
+window.__rent={get db(){return db;},set db(v){db=v;save();render(true);},render:render,acts:acts};
+render(true);
+})();
+</script>
+</body>
+</html>
