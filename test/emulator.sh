@@ -5,7 +5,16 @@ PKG=com.rentmanager.app
 OUT=emu-out; mkdir -p $OUT
 fail=0
 note(){ echo "== $*"; }
-ui(){ adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml $OUT/ui.xml >/dev/null 2>&1; }
+ui(){
+  rm -f $OUT/ui.xml
+  for i in 1 2 3 4 5 6; do
+    adb shell uiautomator dump /sdcard/ui.xml > $OUT/dump-log.txt 2>&1
+    adb pull /sdcard/ui.xml $OUT/ui.xml >/dev/null 2>&1
+    [ -s $OUT/ui.xml ] && return 0
+    cat $OUT/dump-log.txt | head -3; sleep 3
+  done
+  return 1
+}
 shot(){ adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null; }
 # 텍스트(부분 일치)가 있는 노드의 중심 좌표로 탭. 성공 0
 tap_text(){
