@@ -23,10 +23,12 @@ Java 쪽은 얇은 껍데기(`MainActivity.smali`)만 있다. 데이터는 WebVi
 - contracts: (roomId, tenantId, status active|ended|renewed, deposit, rent, fee, start, end, endedOn, payDay, agency, agencyTel, memo, depositReturned)
 - payments: (contractId, ym 'YYYY-MM', paidOn, amount, memo) — 월별 여러 건(부분 납부) 가능
 - 청구월 = 계약일 이후의 첫 납부일부터 만기(또는 퇴실일)까지 매월. 상태는 저장하지 않고 `mstat()`으로 계산(완납/일부/미납/예정).
+- contracts.changes[]: 계약 중간 금액 변경 이력 `{from:'YYYY-MM',rent,fee}`. 계약의 rent/fee는 최초 금액이고, `termsAt(c,ym)`이 해당 청구월에 적용되는 금액을 계산 (`from` 이하 중 가장 최근 값). 과거 청구월은 그대로 유지됨. 금액 표시는 `curTerms`/`lastTerms`/`s.rent` 사용.
 - 갱신 = 기존 계약을 `renewed`로 닫고 새 계약 생성 (월세 변경 시 과거 청구액이 바뀌지 않도록).
 
 ## 화면 / 기능
 홈(이번 달 현황, 미납, 7일 내 예정, 만기 임박, 공실, 백업 알림) · 호실 · 세입자 · 납부(월별) · 더보기(건물 관리, 월별 수입, 백업/복원)
+계약 상세의 "금액 변경"으로 선택한 달부터 월세·관리비 변경 가능. 더보기 → 공지 문자: 세입자별 개별 문자 발송.
 미납 건에서 전화/문자(연체 안내 문구 자동 작성), 백업은 JSON을 공유/복사, 복원은 붙여넣기.
 
 ## 개발 / 테스트
