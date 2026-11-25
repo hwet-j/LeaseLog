@@ -82,7 +82,28 @@ try:
 except Exception as e: print('parse fail',e)
 PY
 # 파일 선택 시도 (이름이 안 보이면 Downloads 로 이동 후 재시도)
-tap_text test.png || { tap_text "Show roots"; sleep 2; tap_text Images; sleep 3; tap_text test.png; } || { tap_text "Show roots"; sleep 2; tap_text Downloads; sleep 3; tap_text test.png; } || echo "WARN: test.png not found in picker"
+pick_tile(){  # test.png 타일의 지정 비율 위치를 탭. $1=x비율(%) $2=y비율(%)
+  ui
+  xy=$(python3 - "$1" "$2" <<'PY'
+import sys,re,xml.etree.ElementTree as ET
+fx,fy=int(sys.argv[1])/100,int(sys.argv[2])/100
+try: root=ET.parse('emu-out/ui.xml').getroot()
+except Exception: sys.exit(1)
+for n in root.iter('node'):
+    if (n.get('content-desc') or '').startswith('test.png') or (n.get('text') or '').startswith('test.png'):
+        x1,y1,x2,y2=map(int,re.findall(r'\d+',n.get('bounds')))
+        print(x1+int((x2-x1)*fx),y1+int((y2-y1)*fy)); sys.exit(0)
+sys.exit(1)
+PY
+  ) || return 1
+  note "tap tile at $xy (${1}%,${2}%)"; adb shell input tap $xy
+}
+for pos in "20 20" "80 80" "80 20" "20 80" "50 90"; do
+  top | grep -q documentsui || break
+  pick_tile $pos || { echo "WARN: tile not found"; break; }
+  sleep 4
+  if top | grep -q photos; then note "preview opened, going back"; adb shell input keyevent KEYCODE_BACK; sleep 3; fi
+done
 sleep 4; shot after
 top | tee $OUT/top-final.txt
 if grep -Eqi "chooser|resolver|intentresolver" $OUT/top-final.txt; then echo "PASS: file delivered to WebView (JS called Android.share with test.png)"; else echo "FAIL: file not delivered"; fail=1; fi
