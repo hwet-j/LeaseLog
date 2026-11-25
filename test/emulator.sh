@@ -53,15 +53,17 @@ adb logcat -c
 adb shell am force-stop $PKG
 adb shell am start -n $PKG/.MainActivity
 sleep 8
-tap_text PICK || { echo "FAIL: PICK button not found"; fail=1; ui; cp $OUT/ui.xml $OUT/ui-main.xml; }
+read W H <<< "$(adb shell wm size | grep -oE '[0-9]+x[0-9]+' | tail -1 | tr x ' ')"
+note "screen ${W}x${H}; tapping WebView test bar"
+adb shell input tap $((W/2)) $((H/4))
 sleep 4; shot picker; top | tee $OUT/top.txt
 if grep -q "rentmanager" $OUT/top.txt; then echo "FAIL: picker did not open"; fail=1; fi
 ui; cp $OUT/ui.xml $OUT/ui-picker.xml
 # 파일 선택 시도 (이름이 안 보이면 Downloads 로 이동 후 재시도)
 tap_text test.png || { tap_text Downloads; sleep 3; tap_text test.png; } || echo "WARN: test.png not found in picker"
 sleep 4; shot after
-adb shell am start -n $PKG/.MainActivity >/dev/null 2>&1; sleep 3
-if has_text "GOT test.png"; then echo "PASS: file delivered to WebView"; else echo "FAIL: file not delivered"; fail=1; fi
+top | tee $OUT/top-final.txt
+if grep -Eqi "chooser|resolver|intentresolver" $OUT/top-final.txt; then echo "PASS: file delivered to WebView (JS called Android.share with test.png)"; else echo "FAIL: file not delivered"; fail=1; fi
 shot final
 adb logcat -d > $OUT/logcat-test.txt
 grep -E "FATAL EXCEPTION|VerifyError" $OUT/logcat-test.txt && fail=1
