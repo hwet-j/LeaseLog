@@ -28,6 +28,9 @@ Java 쪽은 얇은 껍데기(`MainActivity.smali`)만 있다. 데이터는 WebVi
 - 보증금 분할: contracts.deposit(총액), downPay(계약금), downPaidOn, balPaidOn(잔금 입금일). 잔금 = deposit-downPay (`balanceOf`, downPay>0일 때만 추적). 잔금 입금일이 비면 홈에 '보증금 잔금 미입금' 표시.
 - 계좌: props.accBank/accNo/accHolder (→ `account` 문자열 합성, 연체 문자에 사용), tenants.refundAcct(보증금 반환 계좌).
 - 기간 표기: `periodLabel` → '11월분 (11/12-12/11)'.
+- utils[]: 공과금 `{roomId,kind,ym,prev,cur,unit,amount,paidOn,note}` (더보기 → 공과금, 미수 건 문자 안내).
+- files[]: 첨부 사진 메타 `{id,ownerId(계약),kind,date}`. 이미지 본문은 IndexedDB `rentapp-files`(JPEG dataURL, 최대 1600px)에 저장되어 **백업 JSON에는 포함되지 않음**. 파일 선택은 smali `MainActivity$Chrome.onShowFileChooser` → `MainActivity.pickFile/onActivityResult`.
+- 내보내기: 탭 구분 텍스트를 복사/공유 (엑셀·구글시트 붙여넣기). 실제 .xlsx 파일 저장은 미구현(네이티브 파일 저장 필요).
 - 갱신 = 기존 계약을 `renewed`로 닫고 새 계약 생성 (월세 변경 시 과거 청구액이 바뀌지 않도록).
 
 ## 화면 / 기능

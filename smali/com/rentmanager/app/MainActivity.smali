@@ -6,6 +6,8 @@
 # instance fields
 .field private webView:Landroid/webkit/WebView;
 
+.field private fileCb:Landroid/webkit/ValueCallback;
+
 
 # direct methods
 .method public constructor <init>()V
@@ -44,6 +46,12 @@
     const/4 v2, 0x0
 
     invoke-virtual {v1, v2}, Landroid/webkit/WebSettings;->setSupportZoom(Z)V
+
+    new-instance v1, Lcom/rentmanager/app/MainActivity$Chrome;
+
+    invoke-direct {v1, p0}, Lcom/rentmanager/app/MainActivity$Chrome;-><init>(Lcom/rentmanager/app/MainActivity;)V
+
+    invoke-virtual {v0, v1}, Landroid/webkit/WebView;->setWebChromeClient(Landroid/webkit/WebChromeClient;)V
 
     const-string v1, "Android"
 
@@ -170,4 +178,67 @@
     move-exception v0
 
     goto :goto_0
+.end method
+
+.method public pickFile(Landroid/webkit/ValueCallback;Landroid/content/Intent;)V
+    .locals 2
+
+    iget-object v0, p0, Lcom/rentmanager/app/MainActivity;->fileCb:Landroid/webkit/ValueCallback;
+
+    if-eqz v0, :cond_0
+
+    const/4 v1, 0x0
+
+    invoke-interface {v0, v1}, Landroid/webkit/ValueCallback;->onReceiveValue(Ljava/lang/Object;)V
+
+    :cond_0
+    iput-object p1, p0, Lcom/rentmanager/app/MainActivity;->fileCb:Landroid/webkit/ValueCallback;
+
+    const/16 v0, 0x3e9
+
+    :try_start_0
+    invoke-virtual {p0, p2, v0}, Landroid/app/Activity;->startActivityForResult(Landroid/content/Intent;I)V
+    :try_end_0
+    .catch Ljava/lang/Exception; {:try_start_0 .. :try_end_0} :catch_0
+
+    :goto_0
+    return-void
+
+    :catch_0
+    move-exception v0
+
+    const/4 v0, 0x0
+
+    iput-object v0, p0, Lcom/rentmanager/app/MainActivity;->fileCb:Landroid/webkit/ValueCallback;
+
+    invoke-interface {p1, v0}, Landroid/webkit/ValueCallback;->onReceiveValue(Ljava/lang/Object;)V
+
+    goto :goto_0
+.end method
+
+.method protected onActivityResult(IILandroid/content/Intent;)V
+    .locals 2
+
+    invoke-super {p0, p1, p2, p3}, Landroid/app/Activity;->onActivityResult(IILandroid/content/Intent;)V
+
+    const/16 v0, 0x3e9
+
+    if-ne p1, v0, :cond_0
+
+    iget-object v0, p0, Lcom/rentmanager/app/MainActivity;->fileCb:Landroid/webkit/ValueCallback;
+
+    if-eqz v0, :cond_0
+
+    invoke-static {p2, p3}, Landroid/webkit/WebChromeClient$FileChooserParams;->parseResult(ILandroid/content/Intent;)[Landroid/net/Uri;
+
+    move-result-object v1
+
+    invoke-interface {v0, v1}, Landroid/webkit/ValueCallback;->onReceiveValue(Ljava/lang/Object;)V
+
+    const/4 v0, 0x0
+
+    iput-object v0, p0, Lcom/rentmanager/app/MainActivity;->fileCb:Landroid/webkit/ValueCallback;
+
+    :cond_0
+    return-void
 .end method

@@ -102,6 +102,10 @@ input[type=checkbox]{width:22px;height:22px;min-height:0;accent-color:var(--pri)
 .seg button.on{border-color:var(--pri);background:var(--pri-l);color:var(--pri-d)}
 .mnav{display:flex;align-items:center;justify-content:space-between;margin:6px 0}
 .mnav b{font-size:19px}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.thumb{width:84px;text-align:center;font-size:12px;color:var(--sub)}
+.thumb img{width:84px;height:84px;object-fit:cover;border-radius:10px;background:var(--gray-l);display:block;margin-bottom:2px}
+.viewimg{max-width:100%;max-height:60vh;display:block;margin:6px auto 10px;border-radius:12px}
 </style>
 </head>
 <body>
@@ -114,7 +118,7 @@ var KEY = 'rentapp.v1';
 
 /* ───────── 데이터 ───────── */
 var SCHEMA=2;
-function blank(){ return {props:[],rooms:[],tenants:[],contracts:[],payments:[],meta:{lastBackup:null,created:new Date().toISOString(),schema:SCHEMA}}; }
+function blank(){ return {props:[],rooms:[],tenants:[],contracts:[],payments:[],utils:[],files:[],meta:{lastBackup:null,created:new Date().toISOString(),schema:SCHEMA}}; }
 function load(){
   try{ var s=localStorage.getItem(KEY); if(s){ var d=Object.assign(blank(),JSON.parse(s));
     if(!d.meta) d.meta={}; if(d.meta.schema!==SCHEMA){ try{ localStorage.setItem(KEY+'.bak-v1',s); }catch(e){} migrate(d); try{ localStorage.setItem(KEY,JSON.stringify(d)); }catch(e){} }
@@ -177,6 +181,25 @@ function toast(m){
   clearTimeout(toastT); toastT=setTimeout(function(){ t.remove(); },2200);
 }
 function openUri(u){ if(A&&A.openUri) A.openUri(u); else window.open(u,'_blank'); }
+var _idb=null;
+function idb(){ if(_idb) return _idb; _idb=new Promise(function(res,rej){ var r=indexedDB.open('rentapp-files',1); r.onupgradeneeded=function(){ r.result.createObjectStore('f'); }; r.onsuccess=function(){ res(r.result); }; r.onerror=function(){ rej(r.error); }; }); return _idb; }
+function fput(id,v){ return idb().then(function(d){ return new Promise(function(res,rej){ var t=d.transaction('f','readwrite'); t.objectStore('f').put(v,id); t.oncomplete=function(){ res(); }; t.onerror=function(){ rej(t.error); }; }); }); }
+function fget(id){ return idb().then(function(d){ return new Promise(function(res,rej){ var q=d.transaction('f').objectStore('f').get(id); q.onsuccess=function(){ res(q.result); }; q.onerror=function(){ rej(q.error); }; }); }); }
+function fdel(id){ return idb().then(function(d){ return new Promise(function(res){ var t=d.transaction('f','readwrite'); t.objectStore('f').delete(id); t.oncomplete=function(){ res(); }; t.onerror=function(){ res(); }; }); }).catch(function(){}); }
+function compressImage(file){
+  return new Promise(function(res,rej){
+    var url=URL.createObjectURL(file), img=new Image();
+    img.onload=function(){ var k=Math.min(1,1600/Math.max(img.width,img.height)); var cv=document.createElement('canvas'); cv.width=Math.round(img.width*k); cv.height=Math.round(img.height*k); cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); URL.revokeObjectURL(url); res(cv.toDataURL('image/jpeg',0.8)); };
+    img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error('img')); };
+    img.src=url;
+  });
+}
+function hydrate(root){
+  (root||document).querySelectorAll('img[data-fid]').forEach(function(im){
+    if(im.getAttribute('src')) return;
+    fget(im.getAttribute('data-fid')).then(function(u){ if(u) im.src=u; else im.alt='(사진 없음)'; }).catch(function(){});
+  });
+}
 function copyText(t){
   if(A&&A.copy){ A.copy(t); return true; }
   try{ var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); var ok=document.execCommand('copy'); ta.remove(); return ok; }catch(e){ return false; }
@@ -222,7 +245,7 @@ function roomLabel(c){ var r=byId(db.rooms,c.roomId); var p=r&&byId(db.props,r.p
 
 /* ───────── 화면 상태 ───────── */
 var nav={tab:'home',stack:[]};
-var pf={ym:today().slice(0,7),filter:'all',year:new Date().getFullYear()};
+var pf={ym:today().slice(0,7),uym:today().slice(0,7),filter:'all',year:new Date().getFullYear()};
 var modals=[];
 var app=document.getElementById('app');
 
@@ -249,6 +272,8 @@ function render(reset){
     else if(top.t==='props'){ title='건물 관리'; body=viewProps(); fab='<button class="fab" data-act="addProp">＋ 건물 추가</button>'; }
     else if(top.t==='stats'){ title='월별 수입'; sub='실제 입금된 금액 기준'; body=viewStats(); }
     else if(top.t==='backup'){ title='백업 · 복원'; body=viewBackup(); }
+    else if(top.t==='utils'){ title='공과금'; sub='수도·전기·가스 등 검침 기록'; body=viewUtils(); fab='<button class="fab" data-act="addUtil">＋ 공과금 추가</button>'; }
+    else if(top.t==='export'){ title='내보내기'; sub='엑셀·구글시트에 붙여넣기'; body=viewExport(); }
     else if(top.t==='bcast'){ title='공지 문자'; sub='입주 중인 세입자 대상'; body=viewBcast(); }
   } else {
     if(nav.tab==='home'){ title='월세 관리'; sub=dayLabel(today()); body=viewHome(); }
@@ -261,6 +286,7 @@ function render(reset){
   var tabs = TABS.map(function(x){ return '<button class="'+(!top&&nav.tab===x[0]?'on':'')+'" data-act="tab" data-t="'+x[0]+'">'+ICON[x[2]]+'<span>'+x[1]+'</span></button>'; }).join('');
   app.innerHTML='<header class="top">'+back+'<div class="t"><h1>'+esc(title)+'</h1>'+(sub?'<div class="s">'+esc(sub)+'</div>':'')+'</div>'+right+'</header><main id="main">'+body+'</main>'+fab+'<nav class="tabs">'+tabs+'</nav>';
   var m=document.getElementById('main'); if(m) m.scrollTop=st;
+  hydrate(app);
 }
 
 /* ───────── 홈 ───────── */
@@ -425,7 +451,14 @@ function viewRoom(r){
   return h;
 }
 function viewContract(c){
-  return contractCard(c,'')+payListCard(c);
+  return contractCard(c,'')+filesCard(c)+payListCard(c);
+}
+function filesCard(c){
+  var fl=db.files.filter(function(f){return f.ownerId===c.id;});
+  return '<div class="card"><div class="h">첨부 사진 <span class="sub">계약서·영수증</span></div>'+
+    (fl.length? '<div class="thumbs">'+fl.map(function(f){ return '<div class="thumb" data-act="viewFile" data-id="'+f.id+'"><img data-fid="'+f.id+'" alt=""><span>'+esc(f.kind)+'</span></div>'; }).join('')+'</div>' : '<div class="sub" style="margin:6px 0">아직 첨부한 사진이 없어요.</div>')+
+    '<div class="btns"><button class="btn sm line" data-act="addFile" data-c="'+c.id+'" data-k="계약서">계약서</button><button class="btn sm line" data-act="addFile" data-c="'+c.id+'" data-k="영수증">영수증</button><button class="btn sm line" data-act="addFile" data-c="'+c.id+'" data-k="기타">기타</button></div>'+
+    '<div class="sub" style="margin-top:6px">위 버튼으로 사진을 골라 추가해요. 이 휴대폰에만 저장되고 백업에는 포함되지 않아요.</div></div>';
 }
 
 /* ───────── 세입자 ───────── */
@@ -476,9 +509,11 @@ function viewMore(){
   return '<div class="card flat menu">'+
    '<div class="row tap" data-act="props"><div class="grow"><b>건물 관리</b><div class="sub">건물명, 주소, 입금 계좌</div></div><span class="sub">›</span></div>'+
    '<div class="row tap" data-act="bcast"><div class="grow"><b>공지 문자</b><div class="sub">입주 중인 세입자에게 공지를 개별 문자로 보내기</div></div><span class="sub">›</span></div>'+
+   '<div class="row tap" data-act="utils"><div class="grow"><b>공과금</b><div class="sub">수도·전기·가스 검침, 청구, 납부 확인</div></div><span class="sub">›</span></div>'+
+   '<div class="row tap" data-act="export"><div class="grow"><b>내보내기</b><div class="sub">납부·계약·공과금을 엑셀용으로 복사/공유</div></div><span class="sub">›</span></div>'+
    '<div class="row tap" data-act="stats"><div class="grow"><b>월별 수입</b><div class="sub">월별로 받은 월세 합계</div></div><span class="sub">›</span></div>'+
    '<div class="row tap" data-act="backup"><div class="grow"><b>백업 · 복원</b><div class="sub">데이터 내보내기 / 불러오기</div></div><span class="sub">›</span></div></div>'+
-   '<div class="sub" style="text-align:center;margin-top:18px">월세 관리 v1.4 · 모든 데이터는 이 휴대폰에만 저장돼요</div>';
+   '<div class="sub" style="text-align:center;margin-top:18px">월세 관리 v1.5 · 모든 데이터는 이 휴대폰에만 저장돼요</div>';
 }
 function viewProps(){
   if(!db.props.length) return '<div class="empty">등록된 건물이 없어요.<br>호실을 추가하면 기본 건물이 자동으로 만들어져요.</div>';
@@ -534,11 +569,85 @@ function viewBcast(){
   return h;
 }
 document.addEventListener('input',function(e){ if(e.target&&e.target.id==='bc_body') bc.body=e.target.value; });
+
+/* ───────── 공과금 ───────── */
+var UKINDS=['수도','전기','가스','인터넷','기타'];
+function roomName(rid){ var r=byId(db.rooms,rid); if(!r) return '(삭제된 호실)'; var p=byId(db.props,r.propId); return (db.props.length>1&&p? p.name+' ':'')+r.name; }
+function viewUtils(){
+  var ym=pf.uym, list=db.utils.filter(function(u){return u.ym===ym;}).sort(function(a,b){ return natcmp(roomName(a.roomId),roomName(b.roomId)) || natcmp(a.kind,b.kind); });
+  var tot=0,un=0; list.forEach(function(u){ tot+=n0(u.amount); if(!u.paidOn) un+=n0(u.amount); });
+  var h='<div class="mnav"><button class="ib" data-act="umon" data-n="-1">◀</button><b>'+ymLabel(ym)+'</b><button class="ib" data-act="umon" data-n="1">▶</button></div>';
+  h+='<div class="card"><div class="sub">청구 합계</div><div class="big">'+won(tot)+'</div><div class="sub">받지 못한 금액 <b style="color:'+(un?'var(--red)':'var(--ink)')+'">'+won(un)+'</b></div></div>';
+  if(!list.length) return h+'<div class="empty">이 달에 기록된 공과금이 없어요.<br>아래 버튼으로 추가해 보세요.</div>';
+  h+='<div class="card flat">'+list.map(function(u){
+    var rd=(n0(u.prev)||n0(u.cur))? ' · 검침 '+n0(u.prev)+' → '+n0(u.cur) : '';
+    return '<div class="row"><div class="grow tap" data-act="editUtil" data-id="'+u.id+'"><b>'+esc(roomName(u.roomId))+'</b> · '+esc(u.kind)+'<div class="sub">'+esc(u.note||'')+rd+(u.paidOn?' · '+kd(u.paidOn)+' 입금':'')+'</div></div><div class="r"><b>'+won(u.amount)+'</b><div>'+(u.paidOn?'<span class="chip c-paid">받음</span>':'<span class="chip c-late">미수</span> <button class="btn sm line" data-act="utilSms" data-id="'+u.id+'">문자</button>')+'</div></div></div>';
+  }).join('')+'</div>';
+  return h;
+}
+function utilForm(id,roomId){
+  var u=id? byId(db.utils,id) : null;
+  var rooms=db.rooms.slice().sort(function(a,b){return natcmp(roomName(a.id),roomName(b.id));});
+  if(!rooms.length){ toast('먼저 호실을 추가해 주세요'); return; }
+  var cur=today().slice(0,7), ms=[]; for(var i=-12;i<=1;i++) ms.push(addM(cur,i));
+  var vals=u? Object.assign({},u) : {roomId:roomId||rooms[0].id,kind:'수도',ym:pf.uym};
+  openForm({title:u?'공과금 수정':'공과금 추가',values:vals,fields:[
+    {k:'roomId',l:'호실',type:'select',opts:rooms.map(function(r){return [r.id,roomName(r.id)];})},
+    {k:'kind',l:'종류',type:'select',opts:UKINDS.map(function(k){return [k,k];})},
+    {k:'ym',l:'청구 월',type:'select',opts:ms.map(function(m){return [m,ymLabel(m)];})},
+    {k:'prev',l:'이전 검침값',type:'money'},
+    {k:'cur',l:'현재 검침값',type:'money'},
+    {k:'unit',l:'단가 (원) — 입력하면 금액 자동 계산',type:'money'},
+    {k:'amount',l:'청구 금액 (원)',type:'money',req:1,reqPos:1},
+    {k:'paidOn',l:'받은 날짜',type:'date',hint:'입금받았을 때 날짜를 넣어요. 비어 있으면 미수로 표시돼요.'},
+    {k:'note',l:'메모',ph:'예: 기본요금 포함'}],
+    onChange:function(e,el){
+      if(e.target.id==='f_prev'||e.target.id==='f_cur'||e.target.id==='f_unit'){
+        var g=function(k){ return parseInt(digits(el(k).value)||'0',10); };
+        if(g('unit')>0 && g('cur')>g('prev')) el('amount').value=((g('cur')-g('prev'))*g('unit')).toLocaleString('ko-KR');
+      }
+    },
+    onSave:function(v){
+      if(u) Object.assign(u,v); else db.utils.push(Object.assign({id:uid()},v));
+      pf.uym=v.ym; save(); render(); toast('저장했어요'); },
+    onDelete:u? function(){ closeSheet(); confirmBox('이 공과금 기록을 삭제할까요?','삭제',function(){ db.utils=db.utils.filter(function(x){return x!==u;}); save(); render(); toast('삭제했어요'); }); } : null});
+}
+
+/* ───────── 내보내기 (엑셀/구글시트에 붙여넣기용 탭 구분 텍스트) ───────── */
+function tsvCell(v){ return String(v==null?'':v).replace(/[\t\r\n]+/g,' '); }
+function tsv(rows){ return rows.map(function(r){ return r.map(tsvCell).join('\t'); }).join('\n'); }
+function propNameOf(roomId){ var r=byId(db.rooms,roomId)||{}; return (byId(db.props,r.propId)||{}).name||''; }
+function exPayments(){
+  var rows=[['건물','호실','세입자','사용기간','납부예정일','청구금액','입금합계','미납금액','상태','입금일']], tmp=[];
+  db.contracts.forEach(function(c){ var t=byId(db.tenants,c.tenantId)||{}, r=byId(db.rooms,c.roomId)||{};
+    allMonths(c).forEach(function(ym){ var s=mstat(c,ym);
+      tmp.push([s.dd,[propNameOf(c.roomId),r.name||'',t.name||'',periodLabel(c,ym),s.dd,s.due,s.paid,(s.days>0?s.remain:0),s.l,payFor(c,ym).map(function(p){return p.paidOn;}).join(', ')]]); }); });
+  tmp.sort(function(a,b){ return a[0]<b[0]?-1:a[0]>b[0]?1:0; }); tmp.forEach(function(x){ rows.push(x[1]); });
+  return rows;
+}
+function exContracts(){
+  var rows=[['건물','호실','세입자','연락처','상태','보증금','계약금','잔금','월세(현재)','관리비(현재)','입주일','만기일','납부일','비고']];
+  db.contracts.forEach(function(c){ var t=byId(db.tenants,c.tenantId)||{}, r=byId(db.rooms,c.roomId)||{}, m=curTerms(c);
+    rows.push([propNameOf(c.roomId),r.name||'',t.name||'',t.phone||'',c.status==='active'?'입주중':c.status==='renewed'?'갱신됨':'퇴실',n0(c.deposit),n0(c.downPay),balanceOf(c),m.rent,m.fee,c.start,c.end,'매월 '+c.payDay+'일',c.memo||'']); });
+  return rows;
+}
+function exUtils(){
+  var rows=[['건물','호실','종류','청구월','이전검침','현재검침','청구금액','받은날짜','메모']];
+  db.utils.slice().sort(function(a,b){ return a.ym<b.ym?-1:a.ym>b.ym?1:0; }).forEach(function(u){
+    rows.push([propNameOf(u.roomId),(byId(db.rooms,u.roomId)||{}).name||'',u.kind,u.ym,n0(u.prev),n0(u.cur),n0(u.amount),u.paidOn||'',u.note||'']); });
+  return rows;
+}
+var EXPORTS={pay:['납부 내역','기간별 청구·입금·미납 현황',exPayments],con:['계약 목록','세입자·보증금·월세·만기',exContracts],utl:['공과금','검침·청구·수금 내역',exUtils]};
+function viewExport(){
+  return '<div class="banner">복사한 내용을 <b>엑셀 · 구글 시트</b>에서 붙여넣기(Ctrl+V) 하면 칸이 나뉘어 들어가요. 메일·메신저로 공유할 수도 있어요.</div>'+
+    Object.keys(EXPORTS).map(function(k){ var e=EXPORTS[k]; var n=e[2]().length-1;
+      return '<div class="card"><div class="h">'+e[0]+' <span class="chip c-wait">'+n+'건</span></div><div class="sub">'+e[1]+'</div><div class="btns" style="margin-top:8px"><button class="btn" data-act="exCopy" data-k="'+k+'">복사</button><button class="btn ghost" data-act="exShare" data-k="'+k+'">공유</button></div></div>'; }).join('');
+}
 function backupJson(){ return JSON.stringify({app:'rentapp',version:1,exported:new Date().toISOString(),data:db}); }
 function viewBackup(){
   var lb=db.meta.lastBackup;
   return '<div class="card"><div class="sub">저장된 데이터</div><div class="kv"><span>건물</span><span>'+db.props.length+'</span></div><div class="kv"><span>호실</span><span>'+db.rooms.length+'</span></div><div class="kv"><span>세입자</span><span>'+db.tenants.length+'</span></div><div class="kv"><span>계약</span><span>'+db.contracts.length+'</span></div><div class="kv"><span>납부 기록</span><span>'+db.payments.length+'</span></div><div class="kv"><span>마지막 백업</span><span>'+(lb? kd(lb.slice(0,10)):'없음')+'</span></div></div>'+
-   '<div class="card"><div class="h">백업하기</div><div class="sub">백업 내용을 카카오톡(나에게 보내기), 메일, 드라이브 등으로 보내 보관하세요.</div><div class="btns"><button class="btn" data-act="doShare">공유로 내보내기</button><button class="btn ghost" data-act="doCopy">복사</button></div></div>'+
+   '<div class="card"><div class="h">백업하기</div><div class="sub">백업 내용을 카카오톡(나에게 보내기), 메일, 드라이브 등으로 보내 보관하세요. (첨부한 사진은 백업에 포함되지 않아요)</div><div class="btns"><button class="btn" data-act="doShare">공유로 내보내기</button><button class="btn ghost" data-act="doCopy">복사</button></div></div>'+
    '<div class="card"><div class="h">복원하기</div><div class="sub">백업해 둔 내용을 아래에 붙여넣고 복원을 누르세요. 현재 데이터는 모두 바뀌어요.</div><textarea id="rest" rows="4" style="margin-top:8px" placeholder="여기에 붙여넣기"></textarea><div class="btns"><button class="btn" data-act="doRestore">복원</button></div></div>'+
    '<div class="card"><div class="h">전체 삭제</div><div class="sub">모든 데이터를 지우고 처음 상태로 되돌려요.</div><div class="btns"><button class="btn dng" style="flex:1" data-act="doWipe">전체 데이터 삭제</button></div></div>';
 }
@@ -643,6 +752,7 @@ function roomForm(id){
       var cids=db.contracts.filter(function(c){return c.roomId===r.id;}).map(function(c){return c.id;});
       db.payments=db.payments.filter(function(p){return cids.indexOf(p.contractId)<0;});
       db.contracts=db.contracts.filter(function(c){return c.roomId!==r.id;});
+      db.utils=db.utils.filter(function(u){return u.roomId!==r.id;});
       db.rooms=db.rooms.filter(function(x){return x!==r;});
       save(); nav.stack=[]; render(true); toast('삭제했어요'); },'이 호실의 계약과 납부 기록, 호실 특이사항도 함께 삭제돼요.'); } : null});
 }
@@ -717,6 +827,7 @@ function contractForm(pre,cid){
     },
     onDelete:c? function(){ closeSheet(); confirmBox('이 계약을 삭제할까요?','삭제',function(){
       db.payments=db.payments.filter(function(p){return p.contractId!==c.id;});
+      db.files.filter(function(f){return f.ownerId===c.id;}).forEach(function(f){ fdel(f.id); }); db.files=db.files.filter(function(f){return f.ownerId!==c.id;});
       db.contracts=db.contracts.filter(function(x){return x!==c;});
       save(); nav.stack=nav.stack.filter(function(s){return !(s.t==='contract'&&s.id===c.id);}); render(true); toast('삭제했어요'); },'이 계약의 납부 기록도 함께 삭제돼요.'); } : null});
 }
@@ -814,6 +925,39 @@ var acts={
     openUri('sms:'+x.phone+'?body='+encodeURIComponent(bcText(bc.body,x)));
     setTimeout(function(){ render(); },300);
   },
+  utils:function(){ go({t:'utils'}); },
+  export:function(){ go({t:'export'}); },
+  umon:function(d){ pf.uym=addM(pf.uym,Number(d.n)); render(true); },
+  addUtil:function(){ utilForm(); },
+  editUtil:function(d){ utilForm(d.id); },
+  utilSms:function(d){
+    var u=byId(db.utils,d.id); if(!u) return;
+    var r=byId(db.rooms,u.roomId)||{}, p=byId(db.props,r.propId)||{}, c=activeOf(u.roomId), t=c&&byId(db.tenants,c.tenantId);
+    if(!t||!t.phone){ toast('입주 중인 세입자 연락처가 없어요'); return; }
+    var rd=(n0(u.prev)||n0(u.cur))? ' (검침 '+n0(u.prev)+'→'+n0(u.cur)+')' : '';
+    var body='['+(p.name?p.name+' ':'')+r.name+'] '+t.name+'님, '+ymLabel(u.ym)+' '+u.kind+'요금 '+won(u.amount)+rd+' 안내드립니다.'+(p.account?' 입금계좌: '+p.account:'');
+    openUri('sms:'+digits(t.phone)+'?body='+encodeURIComponent(body));
+  },
+  exCopy:function(d){ var t=tsv(EXPORTS[d.k][2]()); if(copyText(t)) toast('복사했어요. 엑셀·시트에 붙여넣으세요'); else toast('복사에 실패했어요'); },
+  exShare:function(d){ var t=tsv(EXPORTS[d.k][2]()); if(A&&A.share) A.share(t); else { copyText(t); toast('브라우저에서는 복사만 돼요'); } },
+  addFile:function(d){
+    var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.style.display='none'; document.body.appendChild(inp);
+    inp.addEventListener('change',function(){
+      var f=inp.files&&inp.files[0]; inp.remove(); if(!f) return; toast('저장 중…');
+      compressImage(f).then(function(url){ var id=uid(); return fput(id,url).then(function(){ db.files.push({id:id,ownerId:d.c,kind:d.k,date:today()}); save(); render(); toast('사진을 추가했어요'); }); })
+        .catch(function(){ toast('사진을 불러오지 못했어요'); });
+    });
+    inp.click();
+  },
+  viewFile:function(d){
+    var f=byId(db.files,d.id); if(!f) return;
+    openSheet('<h3>'+esc(f.kind)+' <span class="sub">'+kd(f.date)+'</span></h3><img class="viewimg" data-fid="'+f.id+'" alt=""><div class="btns"><button class="btn dng" data-f="del">삭제</button><button class="btn ghost" data-f="close" style="flex:1">닫기</button></div>',function(sh){
+      hydrate(sh);
+      sh.addEventListener('click',function(e){ var a=e.target.getAttribute&&e.target.getAttribute('data-f');
+        if(a==='close') closeSheet();
+        else if(a==='del') confirmBox('이 사진을 삭제할까요?','삭제',function(){ closeSheet(); fdel(f.id); db.files=db.files.filter(function(x){return x!==f;}); save(); render(); toast('삭제했어요'); }); });
+    });
+  },
   mon:function(d){ pf.ym=addM(pf.ym,Number(d.n)); render(true); },
   yr:function(d){ pf.year+=Number(d.n); render(true); },
   pfilter:function(d){ pf.filter=d.f; render(); },
@@ -826,7 +970,7 @@ var acts={
     if(!data||!Array.isArray(data.rooms)||!Array.isArray(data.contracts)||!Array.isArray(data.payments)||!Array.isArray(data.tenants)){ toast('백업 형식이 올바르지 않아요'); return; }
     confirmBox('현재 데이터를 백업 내용으로 바꿀까요?','복원',function(){ var oldV=!(data.meta&&data.meta.schema===SCHEMA); db=Object.assign(blank(),data); if(!db.meta) db.meta={}; if(oldV){ db.meta.schema=0; migrate(db); } save(); nav.stack=[]; nav.tab='home'; render(true); toast('복원했어요'); },'지금 저장된 데이터는 사라져요.');
   },
-  doWipe:function(){ confirmBox('모든 데이터를 삭제할까요?','전체 삭제',function(){ confirmBox('정말 삭제할까요? 되돌릴 수 없어요.','네, 삭제합니다',function(){ db=blank(); save(); nav.stack=[]; nav.tab='home'; render(true); toast('삭제했어요'); }); },'백업하지 않았다면 복구할 수 없어요.'); }
+  doWipe:function(){ confirmBox('모든 데이터를 삭제할까요?','전체 삭제',function(){ confirmBox('정말 삭제할까요? 되돌릴 수 없어요.','네, 삭제합니다',function(){ db.files.forEach(function(f){ fdel(f.id); }); db=blank(); save(); nav.stack=[]; nav.tab='home'; render(true); toast('삭제했어요'); }); },'백업하지 않았다면 복구할 수 없어요.'); }
 };
 document.addEventListener('click',function(e){
   var el=e.target.closest&&e.target.closest('[data-act]'); if(!el) return;
