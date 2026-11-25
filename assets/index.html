@@ -148,7 +148,8 @@ function yearLater(s){ var d=pd(s); d.setFullYear(d.getFullYear()+1); d.setDate(
 function dayIn(c,ym){ var p=ym.split('-').map(Number); var last=new Date(p[0],p[1],0).getDate(); return ym+'-'+pad(Math.min(Number(c.payDay)||1,last)); }
 function dueNominal(c,ym){ return dayIn(c,addM(ym,1)); }
 function dueOf(c,ym){ var d=dueNominal(c,ym); if(c.status==='ended' && c.endedOn && d>c.endedOn) return c.endedOn>c.start? c.endedOn : d; return d; }
-function periodLabel(c,ym){ return kds(dayIn(c,ym))+'~'+kds(addD(dueNominal(c,ym),-1)); }
+function mName(ym){ return Number(ym.slice(5,7))+'월분'; }
+function periodLabel(c,ym){ return mName(ym)+' ('+kds(dayIn(c,ym))+'-'+kds(addD(dueNominal(c,ym),-1))+')'; }
 function n0(v){ return Number(v)||0; }
 function won(n){ return n0(n).toLocaleString('ko-KR')+'원'; }
 function man(n){ n=n0(n); if(n && n%10000===0) return (n/10000).toLocaleString('ko-KR')+'만원'; return won(n); }
@@ -280,10 +281,17 @@ function viewHome(){
     h+='<h2>미납 <span class="chip c-late">'+ar.length+'건</span><span class="sub" style="margin-left:auto;font-weight:600">합계 '+won(tot)+'</span></h2>';
     ar.forEach(function(x){
       var c=x.c, ten=byId(db.tenants,c.tenantId)||{};
-      h+='<div class="card"><div class="row tap" style="padding:0;border:0" data-act="room" data-id="'+c.roomId+'"><div class="grow"><b>'+esc(roomLabel(c))+'</b> · '+esc(ten.name||'')+'<div class="sub">'+periodLabel(c,x.ym)+'분 월세 · 납부일 '+kd(x.s.dd)+'</div></div><div class="r"><b style="color:var(--red)">'+won(x.s.remain)+'</b><div><span class="chip c-late">'+x.s.days+'일 연체</span></div></div></div>'+
+      h+='<div class="card"><div class="row tap" style="padding:0;border:0" data-act="room" data-id="'+c.roomId+'"><div class="grow"><b>'+esc(roomLabel(c))+'</b> · '+esc(ten.name||'')+'<div class="sub">'+periodLabel(c,x.ym)+' 월세 · 납부일 '+kd(x.s.dd)+'</div></div><div class="r"><b style="color:var(--red)">'+won(x.s.remain)+'</b><div><span class="chip c-late">'+x.s.days+'일 연체</span></div></div></div>'+
         '<div class="acts"><button class="btn sm" data-act="pay" data-c="'+c.id+'" data-ym="'+x.ym+'">납부 등록</button>'+
         (ten.phone?'<button class="btn sm line" data-act="smsLate" data-c="'+c.id+'" data-ym="'+x.ym+'">문자</button><button class="btn sm line" data-act="call" data-n="'+esc(ten.phone)+'">전화</button>':'')+'</div></div>';
     });
+  }
+  var bal=db.contracts.filter(function(c){ return c.status==='active' && balanceOf(c)>0 && !c.balPaidOn; });
+  if(bal.length){
+    h+='<h2>보증금 잔금 미입금 <span class="chip c-part">'+bal.length+'건</span></h2><div class="card flat">';
+    bal.forEach(function(c){ var ten=byId(db.tenants,c.tenantId)||{};
+      h+='<div class="row tap" data-act="contract" data-id="'+c.id+'"><div class="grow"><b>'+esc(roomLabel(c))+'</b> · '+esc(ten.name||'')+'<div class="sub">입주 '+kd(c.start)+'</div></div><div class="r"><b>'+won(balanceOf(c))+'</b></div></div>'; });
+    h+='</div>';
   }
   var up=[];
   db.contracts.filter(function(c){return c.status==='active';}).forEach(function(c){ allMonths(c).forEach(function(ym){ var s=mstat(c,ym); if(s.k!=='paid' && s.days<=0 && s.days>=-7) up.push({c:c,ym:ym,s:s}); }); });
@@ -305,7 +313,7 @@ function viewHome(){
   if(vac.length){
     h+='<h2>공실 <span class="chip c-vac">'+vac.length+'호실</span></h2><div class="card"><div style="display:flex;flex-wrap:wrap;gap:8px">'+vac.map(function(r){return '<button class="btn sm line" data-act="room" data-id="'+r.id+'">'+esc(r.name)+'</button>';}).join('')+'</div></div>';
   }
-  if(!ar.length && !up.length && !ex.length) h+='<div class="empty">지금 처리할 알림이 없어요 👍</div>';
+  if(!ar.length && !up.length && !ex.length && !bal.length) h+='<div class="empty">지금 처리할 알림이 없어요 👍</div>';
   var lb=db.meta.lastBackup;
   if(db.rooms.length && (!lb || diff(lb.slice(0,10),t)>=30)) h+='<div class="banner" data-act="backup" style="cursor:pointer">'+(lb?'마지막 백업이 30일 넘었어요.':'아직 백업한 적이 없어요.')+' 휴대폰을 바꾸거나 앱을 지우면 데이터가 사라져요. <b>지금 백업하기 ›</b></div>';
   return h;
@@ -340,11 +348,18 @@ function viewRooms(){
   return h;
 }
 
+function balanceOf(c){ return n0(c.downPay)>0? Math.max(0,n0(c.deposit)-n0(c.downPay)) : 0; }
+function depositKv(c){
+  if(!n0(c.deposit)||!n0(c.downPay)) return '';
+  var h=kv('└ 계약금',won(c.downPay)+(c.downPaidOn?' <span class="sub">'+kd(c.downPaidOn)+' 입금</span>':' <span class="chip c-part">입금일 없음</span>'));
+  if(balanceOf(c)) h+=kv('└ 잔금',won(balanceOf(c))+(c.balPaidOn?' <span class="sub">'+kd(c.balPaidOn)+' 입금</span>':' <span class="chip c-late">미입금</span>'));
+  return h;
+}
 function chgList(c){
   var l=(c.changes||[]).slice().sort(function(a,b){return a.from<b.from?-1:1;}); if(!l.length) return '';
   return '<div class="sub" style="margin:10px 0 2px;font-weight:700">금액 변경 이력</div>'+
     '<div class="kv"><span>계약 시작</span><span>월세 '+won(c.rent)+' · 관리비 '+won(c.fee)+'</span></div>'+
-    l.map(function(x){ return '<div class="kv"><span>'+kds(dayIn(c,x.from))+'분부터</span><span>월세 '+won(x.rent)+' · 관리비 '+won(x.fee)+' <button class="ib sm" data-act="delChg" data-id="'+c.id+'" data-from="'+x.from+'" aria-label="삭제">×</button></span></div>'; }).join('');
+    l.map(function(x){ return '<div class="kv"><span>'+mName(x.from)+'부터</span><span>월세 '+won(x.rent)+' · 관리비 '+won(x.fee)+' <button class="ib sm" data-act="delChg" data-id="'+c.id+'" data-from="'+x.from+'" aria-label="삭제">×</button></span></div>'; }).join('');
 }
 function termsForm(c){
   var ms=allMonths(c); if(!ms.length){ toast('청구 월이 없어요'); return; }
@@ -352,14 +367,14 @@ function termsForm(c){
   openForm({title:'월세·관리비 변경',sub:'선택한 기간분부터 새 금액이 적용돼요. <b>이전 기간 청구액은 그대로</b> 유지돼요.',
     values:{from:def,rent:t.rent,fee:t.fee},
     fields:[
-      {k:'from',l:'적용 시작 기간',type:'select',hint:'입주일 기준 한 달 단위예요. 후불이라 다음 달 납부일에 받는 금액부터 바뀌어요.',opts:ms.map(function(m){ return [m,periodLabel(c,m)+'분 ('+kds(dueOf(c,m))+' 납부)']; })},
+      {k:'from',l:'적용 시작 기간',type:'select',hint:'입주일 기준 한 달 단위예요. 후불이라 다음 달 납부일에 받는 금액부터 바뀌어요.',opts:ms.map(function(m){ return [m,periodLabel(c,m)+' · '+kds(dueOf(c,m))+' 납부']; })},
       {k:'rent',l:'새 월세 (원)',type:'money',req:1},
       {k:'fee',l:'새 관리비 (원)',type:'money'}],saveLabel:'변경 적용',
     onSave:function(v){
       if(!c.changes) c.changes=[];
       c.changes=c.changes.filter(function(x){return x.from!==v.from;});
       c.changes.push({from:v.from,rent:v.rent,fee:v.fee});
-      save(); render(); toast(periodLabel(c,v.from)+'분부터 적용했어요'); }});
+      save(); render(); toast(mName(v.from)+'부터 적용했어요'); }});
 }
 function kv(k,v){ return v===''||v==null? '' : '<div class="kv"><span>'+k+'</span><span>'+v+'</span></div>'; }
 function statusChip(c){ return c.status==='active'?'<span class="chip c-act">입주중</span>':c.status==='renewed'?'<span class="chip c-end">갱신됨</span>':'<span class="chip c-end">퇴실</span>'; }
@@ -369,7 +384,7 @@ function contractCard(c, mode){
   var h='<div class="card"><div class="h"><span>'+(mode==='cur'?'현재 계약':'계약 정보')+' '+statusChip(c)+'</span><button class="ib txt" data-act="editContract" data-id="'+c.id+'">수정</button></div>';
   h+='<div class="row tap" data-act="tenant" data-id="'+(ten.id||'')+'" style="padding-top:4px"><div class="av">'+esc((ten.name||'?').charAt(0))+'</div><div class="grow"><b>'+esc(ten.name)+'</b><div class="sub">'+esc(ten.phone||'연락처 없음')+'</div></div><span class="sub">›</span></div>';
   if(ten.phone) h+='<div class="acts" style="margin:0 0 6px"><button class="btn sm line" data-act="call" data-n="'+esc(ten.phone)+'">전화</button><button class="btn sm line" data-act="sms" data-n="'+esc(ten.phone)+'">문자</button></div>';
-  h+=kv('보증금',n0(c.deposit)?won(c.deposit):'')+kv('월세',won(curTerms(c).rent))+kv('관리비',won(curTerms(c).fee))+kv('월 납부액','<b>'+won(curTerms(c).rent+curTerms(c).fee)+'</b>')+chgList(c)+
+  h+=kv('보증금',n0(c.deposit)?won(c.deposit):'')+depositKv(c)+kv('월세',won(curTerms(c).rent))+kv('관리비',won(curTerms(c).fee))+kv('월 납부액','<b>'+won(curTerms(c).rent+curTerms(c).fee)+'</b>')+chgList(c)+
      kv('계약일',kd(c.start))+kv('계약 만기',kd(c.end)+(c.status==='active'?' <span class="chip '+(diff(today(),c.end)<=60?'c-part':'c-wait')+'">'+dday(c.end)+'</span>':''))+kv('월세 납부일','매월 '+c.payDay+'일');
   if(c.status!=='active') h+=kv('종료일',kd(c.endedOn))+(c.status==='ended'?kv('보증금 반환',c.depositReturned?'반환 완료':(n0(c.deposit)?'<span style="color:var(--red);font-weight:700">미반환</span>':'-')):'');
   if(c.agency||c.agencyTel) h+=kv('중개사무소',esc(c.agency||'')+(c.agencyTel?' <button class="btn sm line" style="margin-left:6px" data-act="call" data-n="'+esc(c.agencyTel)+'">'+esc(c.agencyTel)+'</button>':''));
@@ -381,7 +396,7 @@ function contractCard(c, mode){
 function monthRow(c,ym){
   var s=mstat(c,ym), pays=payFor(c,ym);
   var amt = s.k==='paid'? won(s.paid) : s.paid>0? won(s.paid)+' / '+won(s.due) : won(s.due);
-  return '<div class="row tap" data-act="pay" data-c="'+c.id+'" data-ym="'+ym+'"><div class="grow"><b>'+periodLabel(c,ym)+'분</b><div class="sub">납부일 '+kd(s.dd)+(pays.length?' · 입금 '+pays.map(function(p){return kds(p.paidOn);}).join(', '):'')+'</div></div><div class="r"><span class="chip c-'+s.k+'">'+esc(s.l)+'</span><div class="sub">'+amt+'</div></div></div>';
+  return '<div class="row tap" data-act="pay" data-c="'+c.id+'" data-ym="'+ym+'"><div class="grow"><b>'+periodLabel(c,ym)+'</b><div class="sub">납부일 '+kd(s.dd)+(pays.length?' · 입금 '+pays.map(function(p){return kds(p.paidOn);}).join(', '):'')+'</div></div><div class="r"><span class="chip c-'+s.k+'">'+esc(s.l)+'</span><div class="sub">'+amt+'</div></div></div>';
 }
 function payListCard(c){
   var ms=visibleMonths(c).slice().reverse();
@@ -428,7 +443,7 @@ function viewTenants(){
 function viewTenant(t){
   var h='<div class="card"><div class="row" style="padding-top:2px;border:0"><div class="av" style="width:48px;height:48px;font-size:19px">'+esc(t.name.charAt(0))+'</div><div class="grow"><div class="big2" style="font-size:22px">'+esc(t.name)+'</div><div class="sub">'+esc(t.phone||'연락처 없음')+'</div></div></div>';
   if(t.phone) h+='<div class="acts" style="margin-bottom:6px"><button class="btn sm line" data-act="call" data-n="'+esc(t.phone)+'">전화</button><button class="btn sm line" data-act="sms" data-n="'+esc(t.phone)+'">문자</button></div>';
-  h+=kv('실거주자',esc(t.resident||''))+kv('직장/학교',esc(t.job||''))+kv('차량번호',esc(t.car||''));
+  h+=kv('실거주자',esc(t.resident||''))+kv('직장/학교',esc(t.job||''))+kv('차량번호',esc(t.car||''))+kv('보증금 반환 계좌',esc(t.refundAcct||''));
   if(t.guardian||t.guardianPhone) h+=kv('보호자',esc(t.guardian||'')+(t.guardianRel?' ('+esc(t.guardianRel)+')':'')+(t.guardianPhone?'<div style="margin-top:4px"><button class="btn sm line" data-act="call" data-n="'+esc(t.guardianPhone)+'">'+esc(t.guardianPhone)+'</button></div>':''));
   h+='</div>';
   var cs=db.contracts.filter(function(c){return c.tenantId===t.id;}).sort(function(a,b){return a.start<b.start?1:-1;});
@@ -452,7 +467,7 @@ function viewPay(){
   if(!list.length) return h+'<div class="empty">'+(rows.length?'해당하는 항목이 없어요':'이 달에 납부할 계약이 없어요')+'</div>';
   h+='<div class="card flat">'+list.map(function(x){ var ten=byId(db.tenants,x.c.tenantId)||{};
     var pays=payFor(x.c,x.k);
-    return '<div class="row tap" data-act="pay" data-c="'+x.c.id+'" data-ym="'+x.k+'"><div class="grow"><b>'+esc(roomLabel(x.c))+'</b> · '+esc(ten.name||'')+'<div class="sub">'+periodLabel(x.c,x.k)+'분 · 납부일 '+kd(x.s.dd)+(pays.length?' · 입금 '+pays.map(function(p){return kds(p.paidOn);}).join(', '):'')+'</div></div><div class="r"><span class="chip c-'+x.s.k+'">'+esc(x.s.l)+'</span><div class="sub">'+(x.s.paid>0&&x.s.k!=='paid'? won(x.s.paid)+' / ':'')+won(x.s.k==='paid'?x.s.paid:x.s.due)+'</div></div></div>'; }).join('')+'</div>';
+    return '<div class="row tap" data-act="pay" data-c="'+x.c.id+'" data-ym="'+x.k+'"><div class="grow"><b>'+esc(roomLabel(x.c))+'</b> · '+esc(ten.name||'')+'<div class="sub">'+periodLabel(x.c,x.k)+' · 납부일 '+kd(x.s.dd)+(pays.length?' · 입금 '+pays.map(function(p){return kds(p.paidOn);}).join(', '):'')+'</div></div><div class="r"><span class="chip c-'+x.s.k+'">'+esc(x.s.l)+'</span><div class="sub">'+(x.s.paid>0&&x.s.k!=='paid'? won(x.s.paid)+' / ':'')+won(x.s.k==='paid'?x.s.paid:x.s.due)+'</div></div></div>'; }).join('')+'</div>';
   return h;
 }
 
@@ -463,12 +478,12 @@ function viewMore(){
    '<div class="row tap" data-act="bcast"><div class="grow"><b>공지 문자</b><div class="sub">입주 중인 세입자에게 공지를 개별 문자로 보내기</div></div><span class="sub">›</span></div>'+
    '<div class="row tap" data-act="stats"><div class="grow"><b>월별 수입</b><div class="sub">월별로 받은 월세 합계</div></div><span class="sub">›</span></div>'+
    '<div class="row tap" data-act="backup"><div class="grow"><b>백업 · 복원</b><div class="sub">데이터 내보내기 / 불러오기</div></div><span class="sub">›</span></div></div>'+
-   '<div class="sub" style="text-align:center;margin-top:18px">월세 관리 v1.3 · 모든 데이터는 이 휴대폰에만 저장돼요</div>';
+   '<div class="sub" style="text-align:center;margin-top:18px">월세 관리 v1.4 · 모든 데이터는 이 휴대폰에만 저장돼요</div>';
 }
 function viewProps(){
   if(!db.props.length) return '<div class="empty">등록된 건물이 없어요.<br>호실을 추가하면 기본 건물이 자동으로 만들어져요.</div>';
   return '<div class="card flat">'+db.props.map(function(p){ var n=db.rooms.filter(function(r){return r.propId===p.id;}).length;
-    return '<div class="row tap" data-act="editProp" data-id="'+p.id+'"><div class="grow"><b>'+esc(p.name)+'</b><div class="sub">'+esc(p.addr||'주소 없음')+(p.account?' · '+esc(p.account):'')+'</div></div><div class="r"><span class="chip c-wait">'+n+'호실</span></div></div>'; }).join('')+'</div>';
+    return '<div class="row tap" data-act="editProp" data-id="'+p.id+'"><div class="grow"><b>'+esc(p.name)+'</b><div class="sub">'+esc(p.addr||'주소 없음')+(p.account?' · '+esc(p.account):'')+'</div></div><div class="r"><span class="chip c-wait">'+n+'호실</span>'+(p.account?'<div><button class="btn sm line" data-act="copyAcct" data-id="'+p.id+'">계좌 복사</button></div>':'')+'</div></div>'; }).join('')+'</div>';
 }
 function viewStats(){
   var y=pf.year, mon=[]; for(var i=0;i<12;i++) mon.push(0);
@@ -593,14 +608,18 @@ document.addEventListener('input',function(e){
 });
 
 /* ───────── 폼: 건물 / 호실 / 세입자 / 계약 / 납부 ───────── */
+function acctText(b,n,h){ var t=[b,n].filter(Boolean).join(' '); return t+(h?(t?' ':'')+'('+h+')':''); }
 function propForm(id){
   var p=id? byId(db.props,id) : null;
-  openForm({title:p?'건물 수정':'건물 추가',values:p||{},fields:[
+  var pv=Object.assign({},p||{}); if(p && !p.accNo && !p.accBank && p.account) pv.accNo=p.account;
+  openForm({title:p?'건물 수정':'건물 추가',values:pv,fields:[
     {k:'name',l:'건물 이름',req:1,ph:'예: 행복빌라'},
     {k:'addr',l:'주소'},
-    {k:'account',l:'월세 입금 계좌',ph:'은행 계좌번호 (예금주)'},
+    {k:'accBank',l:'월세 입금 은행',ph:'예: 국민은행'},
+    {k:'accNo',l:'계좌번호',ph:'숫자와 - 만 입력'},
+    {k:'accHolder',l:'예금주'},
     {k:'memo',l:'건물 메모',type:'textarea'}],
-    onSave:function(v){ if(p) Object.assign(p,v); else db.props.push(Object.assign({id:uid()},v)); save(); render(); toast('저장했어요'); },
+    onSave:function(v){ v.account=acctText(v.accBank,v.accNo,v.accHolder); if(p) Object.assign(p,v); else db.props.push(Object.assign({id:uid()},v)); save(); render(); toast('저장했어요'); },
     onDelete:p? function(){ if(db.rooms.some(function(r){return r.propId===p.id;})){ toast('호실이 있는 건물은 삭제할 수 없어요'); return; } closeSheet(); db.props=db.props.filter(function(x){return x!==p;}); save(); render(); toast('삭제했어요'); } : null});
 }
 function ensureProp(){
@@ -635,7 +654,8 @@ var TFIELDS=[
   {k:'guardianRel',l:'보호자 관계',ph:'예: 부, 모, 배우자'},
   {k:'guardianPhone',l:'보호자 전화번호',type:'tel'},
   {k:'job',l:'직장 / 학교'},
-  {k:'car',l:'차량번호'}];
+  {k:'car',l:'차량번호'},
+  {k:'refundAcct',l:'보증금 반환 계좌',ph:'은행 계좌번호 (예금주)',hint:'퇴실 때 보증금을 돌려줄 계좌예요.'}];
 function tenantForm(id){
   var t=id? byId(db.tenants,id) : null;
   openForm({title:t?'세입자 수정':'세입자 추가',values:t||{},fields:TFIELDS,
@@ -659,7 +679,10 @@ function contractForm(pre,cid){
     {k:'nPhone',l:'전화번호',type:'tel',showIf:['tenantId','new']},
     {k:'nGuardian',l:'보호자 이름',showIf:['tenantId','new']},
     {k:'nGuardianPhone',l:'보호자 전화번호',type:'tel',showIf:['tenantId','new']},
-    {k:'deposit',l:'보증금 (원)',type:'money'},
+    {k:'deposit',l:'보증금 총액 (원)',type:'money'},
+    {k:'downPay',l:'계약금 (원)',type:'money',hint:'입력하면 잔금(보증금-계약금)이 자동 계산돼요. 계약금 없이 한 번에 받았다면 비워 두세요.'},
+    {k:'downPaidOn',l:'계약금 입금일',type:'date'},
+    {k:'balPaidOn',l:'잔금 입금일',type:'date',hint:'잔금을 받으면 날짜를 넣어요. 비어 있으면 홈에 미입금으로 표시돼요.'},
     {k:'rent',l:'월세 (원)',type:'money',req:1},
     {k:'fee',l:'관리비 (원)',type:'money'},
     {k:'start',l:'계약일 (입주 시작)',type:'date',req:1},
@@ -687,7 +710,7 @@ function contractForm(pre,cid){
         var nt={id:uid(),name:v.nName,phone:v.nPhone,guardian:v.nGuardian,guardianPhone:v.nGuardianPhone,notes:[]};
         db.tenants.push(nt); tid=nt.id;
       }
-      var data={tenantId:tid,deposit:v.deposit,rent:v.rent,fee:v.fee,start:v.start,end:v.end,payDay:Number(v.payDay),agency:v.agency,agencyTel:v.agencyTel,memo:v.memo};
+      var data={tenantId:tid,deposit:v.deposit,downPay:Math.min(v.downPay,v.deposit)||0,downPaidOn:v.downPaidOn,balPaidOn:v.balPaidOn,rent:v.rent,fee:v.fee,start:v.start,end:v.end,payDay:Number(v.payDay),agency:v.agency,agencyTel:v.agencyTel,memo:v.memo};
       if(c){ Object.assign(c,data); if(c.status==='ended') c.depositReturned=!!v.depositReturned; }
       else { if(activeOf(roomId)){ toast('이미 입주 중인 계약이 있어요'); return false; } db.contracts.push(Object.assign({id:uid(),roomId:roomId,status:'active',endedOn:null,depositReturned:false},data)); }
       save(); render(); toast('저장했어요');
@@ -721,7 +744,7 @@ function renewForm(c){
 function openPay(cid,ym){
   var c=byId(db.contracts,cid); if(!c) return;
   var s=mstat(c,ym), pays=payFor(c,ym), t=byId(db.tenants,c.tenantId)||{}, r=byId(db.rooms,c.roomId)||{};
-  var pre='<div class="sub">'+esc(t.name||'')+' · '+periodLabel(c,ym)+'분 월세 · 납부일 '+kd(s.dd)+'</div>'+
+  var pre='<div class="sub">'+esc(t.name||'')+' · '+periodLabel(c,ym)+' 월세 · 납부일 '+kd(s.dd)+'</div>'+
     '<div class="card" style="margin:12px 0 4px"><div class="kv"><span>청구 금액</span><span>'+won(s.due)+' <span class="sub">(월세 '+won(s.rent)+(s.fee?' + 관리비 '+won(s.fee):'')+')</span></span></div><div class="kv"><span>입금 합계</span><span>'+won(s.paid)+'</span></div><div class="kv"><span>남은 금액</span><span><b style="color:'+(s.remain?'var(--red)':'var(--pri)')+'">'+won(s.remain)+'</b></span></div></div>'+
     (pays.length? '<div class="sub" style="margin-top:12px;font-weight:700">입금 내역</div>'+pays.map(function(p){ return '<div class="row" style="padding:8px 0"><div class="grow"><b>'+kd(p.paidOn)+'</b><div class="sub">'+esc(p.memo||'')+'</div></div><b>'+won(p.amount)+'</b><button class="ib sm" data-act="delPay" data-id="'+p.id+'" data-c="'+cid+'" data-ym="'+ym+'">✕</button></div>'; }).join('') : '');
   openForm({title:esc(r.name||'')+' 납부 등록',pre:pre,values:{paidOn:today(),amount:s.remain||''},fields:[
@@ -756,8 +779,9 @@ var acts={
   editProp:function(d){ propForm(d.id); },
   newContract:function(d){ contractForm({roomId:d.room}); },
   editContract:function(d){ contractForm(null,d.id); },
+  copyAcct:function(d){ var p=byId(db.props,d.id); if(p&&p.account){ if(copyText(p.account)) toast('계좌를 복사했어요'); else toast('복사에 실패했어요'); } },
   chgTerms:function(d){ termsForm(byId(db.contracts,d.id)); },
-  delChg:function(d){ var c=byId(db.contracts,d.id); confirmBox(kds(dayIn(c,d.from))+'분부터의 금액 변경을 삭제할까요?','삭제',function(){ c.changes=(c.changes||[]).filter(function(x){return x.from!==d.from;}); save(); render(); toast('삭제했어요'); },'삭제하면 그 달부터 이전 금액으로 청구돼요.'); },
+  delChg:function(d){ var c=byId(db.contracts,d.id); confirmBox(mName(d.from)+'부터의 금액 변경을 삭제할까요?','삭제',function(){ c.changes=(c.changes||[]).filter(function(x){return x.from!==d.from;}); save(); render(); toast('삭제했어요'); },'삭제하면 그 달부터 이전 금액으로 청구돼요.'); },
   renew:function(d){ renewForm(byId(db.contracts,d.id)); },
   endC:function(d){ endForm(byId(db.contracts,d.id)); },
   reopen:function(d){ var c=byId(db.contracts,d.id); if(activeOf(c.roomId)){ toast('이미 입주 중인 계약이 있어요'); return; } c.status='active'; c.endedOn=null; save(); render(); toast('계약을 다시 시작했어요'); },
@@ -774,7 +798,7 @@ var acts={
   smsLate:function(d){
     var c=byId(db.contracts,d.c), t=byId(db.tenants,c.tenantId)||{}, r=byId(db.rooms,c.roomId)||{}, p=byId(db.props,r.propId)||{};
     var s=mstat(c,d.ym);
-    var body='['+(p.name?p.name+' ':'')+r.name+'] '+t.name+'님, '+periodLabel(c,d.ym)+'분 월세 '+won(s.remain)+'이 아직 확인되지 않았습니다. 확인 부탁드립니다.'+(p.account?' 입금계좌: '+p.account:'');
+    var body='['+(p.name?p.name+' ':'')+r.name+'] '+t.name+'님, '+periodLabel(c,d.ym)+' 월세 '+won(s.remain)+'이 아직 확인되지 않았습니다. 확인 부탁드립니다.'+(p.account?' 입금계좌: '+p.account:'');
     openUri('sms:'+digits(t.phone)+'?body='+encodeURIComponent(body));
   },
   bcast:function(){ go({t:'bcast'}); },
