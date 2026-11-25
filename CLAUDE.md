@@ -22,8 +22,9 @@ Java 쪽은 얇은 껍데기(`MainActivity.smali`)만 있다. 데이터는 WebVi
 - tenants: 세입자 (name, phone, resident, guardian, guardianRel, guardianPhone, job, car, notes[]) ← 세입자 특이사항
 - contracts: (roomId, tenantId, status active|ended|renewed, deposit, rent, fee, start, end, endedOn, payDay, agency, agencyTel, memo, depositReturned)
 - payments: (contractId, ym 'YYYY-MM', paidOn, amount, memo) — 월별 여러 건(부분 납부) 가능
-- 청구월 = 계약일 이후의 첫 납부일부터 만기(또는 퇴실일)까지 매월. 상태는 저장하지 않고 `mstat()`으로 계산(완납/일부/미납/예정).
-- contracts.changes[]: 계약 중간 금액 변경 이력 `{from:'YYYY-MM',rent,fee}`. 계약의 rent/fee는 최초 금액이고, `termsAt(c,ym)`이 해당 청구월에 적용되는 금액을 계산 (`from` 이하 중 가장 최근 값). 과거 청구월은 그대로 유지됨. 금액 표시는 `curTerms`/`lastTerms`/`s.rent` 사용.
+- **후불·입주일 기준 (meta.schema=2)**: 청구키 `ym` = 사용기간이 시작되는 달. 기간 = `dayIn(c,ym)` ~ 다음 달 납부일 전날(`periodLabel`), 납부일 = 다음 달 납부일(`dueOf`; 퇴실 계약의 마지막 기간은 퇴실일로 당김). 납부일(payDay)은 기본값이 입주일의 날짜. `allMonths()`가 기간을 만들고 상태는 저장하지 않고 `mstat()`으로 계산(완납/일부/미납/예정). 홈·납부 탭의 '이번 달'은 납부일이 속한 달 기준.
+- 스키마 마이그레이션: 선불(v1)의 payments.ym / changes.from을 한 달 앞으로 이동(`migrate()`), 원본은 localStorage `rentapp.v1.bak-v1`에 보관. 복원 시 구버전 백업도 자동 변환.
+- contracts.changes[]: 계약 중간 금액 변경 이력 `{from:'YYYY-MM',rent,fee}`. 계약의 rent/fee는 최초 금액이고, `termsAt(c,ym)`이 해당 청구기간에 적용되는 금액을 계산 (`from` 이하 중 가장 최근 값). 과거 청구월은 그대로 유지됨. 금액 표시는 `curTerms`/`lastTerms`/`s.rent` 사용.
 - 갱신 = 기존 계약을 `renewed`로 닫고 새 계약 생성 (월세 변경 시 과거 청구액이 바뀌지 않도록).
 
 ## 화면 / 기능
