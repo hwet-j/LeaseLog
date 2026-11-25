@@ -56,7 +56,12 @@ def ch(t,d): c=struct.pack('>I',len(d))+t+d; return c+struct.pack('>I',zlib.crc3
 open('emu-out/test.png','wb').write(b'\x89PNG\r\n\x1a\n'+ch(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+ch(b'IDAT',zlib.compress(raw))+ch(b'IEND',b''))
 PY
 adb push $OUT/test.png /sdcard/Download/test.png >/dev/null
-adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/test.png >/dev/null
+adb push $OUT/test.png /sdcard/Pictures/test.png >/dev/null
+adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/test.png >/dev/null
+adb shell content call --uri content://media/external_primary --method scan_volume --arg external_primary 2>&1 | head -2
+adb shell content call --uri content://media --method scan_volume --arg external_primary 2>&1 | head -2
+sleep 5
+adb shell content query --uri content://media/external/images/media --projection _display_name 2>&1 | head -5
 adb install -r out-test/signed/rent-aligned-signed.apk || fail=1
 adb logcat -c
 adb shell am force-stop $PKG
@@ -68,8 +73,16 @@ adb shell input tap $((W/2)) $((H/4))
 sleep 4; shot picker; top | tee $OUT/top.txt
 if grep -q "rentmanager" $OUT/top.txt; then echo "FAIL: picker did not open"; fail=1; fi
 ui; cp $OUT/ui.xml $OUT/ui-picker.xml
+note "picker texts"; python3 - <<'PY'
+import xml.etree.ElementTree as ET
+try:
+    for n in ET.parse('emu-out/ui.xml').getroot().iter('node'):
+        v=(n.get('text') or '')+'|'+(n.get('content-desc') or '')+'|'+(n.get('resource-id') or '')
+        if v.strip('|'): print('  ',v)
+except Exception as e: print('parse fail',e)
+PY
 # 파일 선택 시도 (이름이 안 보이면 Downloads 로 이동 후 재시도)
-tap_text test.png || { tap_text Downloads; sleep 3; tap_text test.png; } || echo "WARN: test.png not found in picker"
+tap_text test.png || { tap_text "Show roots"; sleep 2; tap_text Images; sleep 3; tap_text test.png; } || { tap_text "Show roots"; sleep 2; tap_text Downloads; sleep 3; tap_text test.png; } || echo "WARN: test.png not found in picker"
 sleep 4; shot after
 top | tee $OUT/top-final.txt
 if grep -Eqi "chooser|resolver|intentresolver" $OUT/top-final.txt; then echo "PASS: file delivered to WebView (JS called Android.share with test.png)"; else echo "FAIL: file not delivered"; fail=1; fi
