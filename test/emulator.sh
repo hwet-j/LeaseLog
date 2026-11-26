@@ -108,6 +108,34 @@ sleep 4; shot after
 top | tee $OUT/top-final.txt
 if grep -Eqi "chooser|resolver|intentresolver" $OUT/top-final.txt; then echo "PASS: file delivered to WebView (JS called Android.share with test.png)"; else echo "FAIL: file not delivered"; fail=1; fi
 shot final
+
+note "3) AI 비서 인텐트 (rentmanager://assistant) — 콜드 스타트 / 웜 스타트"
+# 데이터가 없는 앱이므로 "없는 호실" 안내 화면이 뜨면 인텐트→네이티브→JS 브릿지→처리→렌더 전체 경로가 동작한 것이다.
+mkcmd(){ python3 - "$1" "$2" <<'PY'
+import sys,json,time,urllib.parse
+c={"v":1,"id":sys.argv[1],"ts":int(time.time()*1000),"op":"record_payment","room":sys.argv[2],"amount":450000}
+print('rentmanager://assistant?cmd='+urllib.parse.quote(json.dumps(c,separators=(',',':')),safe=''))
+PY
+}
+adb install -r out/signed/rent-aligned-signed.apk || fail=1
+adb shell am force-stop $PKG
+adb logcat -c
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkcmd cold-1 777)" -p $PKG
+sleep 8; ui; shot assistant-cold
+if grep -q "777" $OUT/ui.xml && grep -q "찾을 수 없어요" $OUT/ui.xml; then echo "PASS: cold-start assistant intent handled"; else echo "FAIL: cold-start assistant intent not handled"; fail=1; fi
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkcmd warm-2 888)" -p $PKG
+sleep 4; ui; shot assistant-warm
+if grep -q "888" $OUT/ui.xml && ! grep -q "777" $OUT/ui.xml; then echo "PASS: warm-start assistant intent handled (replaced previous)"; else echo "FAIL: warm-start assistant intent not handled"; fail=1; fi
+# 같은 id 재전송은 무시되어야 한다 (재시작 시 재실행 방지)
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkcmd warm-2 999)" -p $PKG
+sleep 3; ui
+if grep -q "999" $OUT/ui.xml; then echo "FAIL: duplicate id was processed"; fail=1; else echo "PASS: duplicate id ignored"; fi
+# 잘못된 URI(불투명 URI)로도 앱이 죽지 않아야 한다
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "rentmanager:opaque" -p $PKG
+sleep 3
+adb shell pidof $PKG >/dev/null || { echo "FAIL: app died on malformed intent"; fail=1; }
+adb logcat -d > $OUT/logcat-assistant.txt
+if grep -E "FATAL EXCEPTION|VerifyError" $OUT/logcat-assistant.txt; then echo "FAIL: crash during assistant intents"; fail=1; fi
 adb logcat -d > $OUT/logcat-test.txt
 grep -E "FATAL EXCEPTION|VerifyError" $OUT/logcat-test.txt && fail=1
 echo "RESULT fail=$fail"; exit $fail

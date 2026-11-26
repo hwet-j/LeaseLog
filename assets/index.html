@@ -766,9 +766,9 @@ var TFIELDS=[
   {k:'job',l:'직장 / 학교'},
   {k:'car',l:'차량번호'},
   {k:'refundAcct',l:'보증금 반환 계좌',ph:'은행 계좌번호 (예금주)',hint:'퇴실 때 보증금을 돌려줄 계좌예요.'}];
-function tenantForm(id){
+function tenantForm(id,fill){
   var t=id? byId(db.tenants,id) : null;
-  openForm({title:t?'세입자 수정':'세입자 추가',values:t||{},fields:TFIELDS,
+  openForm({title:t?'세입자 수정':'세입자 추가',pre:(fill&&fill.note?'<div class="sub" style="color:var(--pri);font-weight:700;margin:8px 0">🤖 '+esc(fill.note)+'</div>':''),values:t||fill||{},fields:TFIELDS,
     onSave:function(v){ if(t) Object.assign(t,v); else db.tenants.push(Object.assign({id:uid(),notes:[]},v)); save(); render(); toast('저장했어요'); },
     onDelete:t? function(){
       if(db.contracts.some(function(c){return c.tenantId===t.id;})){ toast('계약 이력이 있는 세입자는 삭제할 수 없어요'); return; }
@@ -783,6 +783,7 @@ function contractForm(pre,cid){
   var t0=today();
   var vals=c? Object.assign({},c,{payDay:String(c.payDay)}) : {tenantId:pre.tenantId||(tens.length?'new':'new'),start:t0,end:yearLater(t0),payDay:String(pd(t0).getDate())};
   if(!c && pre.tenantId) vals.tenantId=pre.tenantId;
+  if(!c && pre.vals){ var pv=pre.vals; Object.assign(vals,pv); if(pv.start){ if(!pv.end) vals.end=yearLater(pv.start); if(!pv.payDay) vals.payDay=String(pd(pv.start).getDate()); } if(pv.payDay) vals.payDay=String(pv.payDay); }
   var fields=[
     {k:'tenantId',l:'세입자',type:'select',opts:tOpts},
     {k:'nName',l:'새 세입자 이름',req:1,showIf:['tenantId','new']},
@@ -802,8 +803,8 @@ function contractForm(pre,cid){
     {k:'agencyTel',l:'부동산 전화번호',type:'tel'},
     {k:'memo',l:'비고 (계약 관련)',type:'textarea',ph:'특약사항, 입금자명 등'}];
   if(c && c.status==='ended') fields.push({k:'depositReturned',l:'보증금 반환 완료',type:'check'});
-  var endTouched=!!c, dayTouched=!!c;
-  openForm({title:c?'계약 수정':'입주 계약 등록',sub:esc((byId(db.rooms,roomId)||{}).name||'')+' 호실',values:vals,fields:fields,
+  var endTouched=!!c||!!(pre&&pre.vals&&pre.vals.end), dayTouched=!!c||!!(pre&&pre.vals&&pre.vals.payDay);
+  openForm({title:c?'계약 수정':'입주 계약 등록',sub:esc((byId(db.rooms,roomId)||{}).name||'')+' 호실',pre:(pre&&pre.note?'<div class="sub" style="color:var(--pri);font-weight:700;margin:8px 0">🤖 '+esc(pre.note)+'</div>':''),values:vals,fields:fields,
     onChange:function(e,el){
       var id=e.target.id;
       if(id==='f_end') endTouched=true;
@@ -852,13 +853,13 @@ function renewForm(c){
       db.contracts.push({id:uid(),roomId:c.roomId,tenantId:c.tenantId,status:'active',endedOn:null,depositReturned:false,deposit:v.deposit,rent:v.rent,fee:v.fee,start:v.start,end:v.end,payDay:c.payDay,agency:c.agency,agencyTel:c.agencyTel,memo:c.memo});
       save(); render(); toast('갱신했어요'); }});
 }
-function openPay(cid,ym){
+function openPay(cid,ym,fill){
   var c=byId(db.contracts,cid); if(!c) return;
   var s=mstat(c,ym), pays=payFor(c,ym), t=byId(db.tenants,c.tenantId)||{}, r=byId(db.rooms,c.roomId)||{};
-  var pre='<div class="sub">'+esc(t.name||'')+' · '+periodLabel(c,ym)+' 월세 · 납부일 '+kd(s.dd)+'</div>'+
+  var pre=(fill&&fill.note?'<div class="sub" style="color:var(--pri);font-weight:700;margin-bottom:8px">🤖 '+esc(fill.note)+'</div>':'')+'<div class="sub">'+esc(t.name||'')+' · '+periodLabel(c,ym)+' 월세 · 납부일 '+kd(s.dd)+'</div>'+
     '<div class="card" style="margin:12px 0 4px"><div class="kv"><span>청구 금액</span><span>'+won(s.due)+' <span class="sub">(월세 '+won(s.rent)+(s.fee?' + 관리비 '+won(s.fee):'')+')</span></span></div><div class="kv"><span>입금 합계</span><span>'+won(s.paid)+'</span></div><div class="kv"><span>남은 금액</span><span><b style="color:'+(s.remain?'var(--red)':'var(--pri)')+'">'+won(s.remain)+'</b></span></div></div>'+
     (pays.length? '<div class="sub" style="margin-top:12px;font-weight:700">입금 내역</div>'+pays.map(function(p){ return '<div class="row" style="padding:8px 0"><div class="grow"><b>'+kd(p.paidOn)+'</b><div class="sub">'+esc(p.memo||'')+'</div></div><b>'+won(p.amount)+'</b><button class="ib sm" data-act="delPay" data-id="'+p.id+'" data-c="'+cid+'" data-ym="'+ym+'">✕</button></div>'; }).join('') : '');
-  openForm({title:esc(r.name||'')+' 납부 등록',pre:pre,values:{paidOn:today(),amount:s.remain||''},fields:[
+  openForm({title:esc(r.name||'')+' 납부 등록',pre:pre,values:{paidOn:(fill&&fill.paidOn)||today(),amount:(fill&&fill.amount)||s.remain||'',memo:(fill&&fill.memo)||''},fields:[
     {k:'paidOn',l:'납부(입금)한 날짜',type:'date',req:1},
     {k:'amount',l:'입금 금액 (원)',type:'money',req:1,reqPos:1},
     {k:'memo',l:'메모',ph:'예: 계좌이체, 현금, 입금자명'}],saveLabel:pays.length?'추가 입금 등록':'납부 등록',
@@ -979,6 +980,90 @@ document.addEventListener('click',function(e){
   fn(el.dataset,el);
 });
 
+/* ───────── AI 비서 연동 ─────────
+ * 비서 앱이 rentmanager://assistant?cmd=<JSON> 으로 요청을 보내면, 값이 채워진 기존 폼을 열어 준다.
+ * - 자동 저장 없음: 사용자가 폼의 저장 버튼을 눌러야 반영된다.
+ * - 이 앱의 데이터를 비서에게 돌려주지 않는다 (단방향).
+ * - 요청 형식: {v:1, id, ts, op:'record_payment'|'register_tenant', ...}  (id 중복·10분 경과 요청은 무시)
+ */
+var ASSIST_TTL=10*60*1000, ASSIST_LAST='rentapp.assist.last';
+function infoBox(title,msg){
+  openSheet('<h3>'+esc(title)+'</h3><div class="sub">'+nl(msg)+'</div><div class="btns"><button class="btn" style="flex:1" data-f="ok">확인</button></div>',function(sh){
+    sh.addEventListener('click',function(e){ if(e.target.getAttribute&&e.target.getAttribute('data-f')==='ok') closeSheet(); });
+  });
+}
+function aStr(v,max){ return typeof v==='string'? v.trim().slice(0,max||100) : ''; }
+function aDate(v){ return typeof v==='string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && ymd(pd(v))===v ? v : ''; }
+function aMoney(v){ var n=typeof v==='number'? v : (typeof v==='string' && /^\d+$/.test(v)? Number(v) : NaN); return Number.isInteger(n)&&n>=0&&n<=1e10? n : -1; }
+function aYm(v){ return typeof v==='string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v)? v : ''; }
+function normName(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
+function normRoom(s){ return normName(s).replace(/(호실|호)$/,''); }
+function findRoom(name,building){
+  var n=normRoom(name); if(!n) return {err:'호실 이름이 필요해요.'};
+  var list=db.rooms.filter(function(r){ return normRoom(r.name)===n; });
+  if(building){ var b=normName(building); list=list.filter(function(r){ var p=byId(db.props,r.propId); return p && normName(p.name)===b; }); }
+  if(!list.length) return {err:'"'+name+'" 호실을 찾을 수 없어요.\n등록된 호실: '+(db.rooms.slice(0,15).map(function(r){return roomName(r.id);}).join(', ')||'없음')};
+  if(list.length>1) return {err:'"'+name+'" 호실이 여러 건물에 있어요. 건물 이름을 함께 알려 주세요.\n'+list.map(function(r){return roomName(r.id);}).join(', ')};
+  return {room:list[0]};
+}
+function aPayment(c){
+  var T='납부를 등록할 수 없어요';
+  var rm=findRoom(aStr(c.room,30),aStr(c.building,40)); if(rm.err) return infoBox(T,rm.err);
+  var ct=activeOf(rm.room.id); if(!ct) return infoBox(T,roomName(rm.room.id)+'에 입주 중인 계약이 없어요.');
+  var amount=aMoney(c.amount); if(!(amount>0)) return infoBox(T,'금액이 올바르지 않아요.');
+  var paidOn=c.paidOn==null? today() : aDate(c.paidOn); if(!paidOn) return infoBox(T,'날짜 형식이 올바르지 않아요. (YYYY-MM-DD)');
+  var months=allMonths(ct), ym=aYm(c.period);
+  if(c.period!=null && !ym) return infoBox(T,'월분 형식이 올바르지 않아요. (YYYY-MM)');
+  if(ym){ if(months.indexOf(ym)<0) return infoBox(T,ymLabel(ym)+'은(는) 이 계약의 청구 기간이 아니에요.'); }
+  else {
+    var unpaid=months.filter(function(m){ return mstat(ct,m).remain>0; });
+    if(!unpaid.length) return infoBox(T,roomName(rm.room.id)+'의 모든 청구월이 이미 완납이에요. 월분을 지정해 다시 요청해 주세요.');
+    ym=unpaid[0];
+  }
+  openPay(ct.id,ym,{paidOn:paidOn,amount:amount,memo:aStr(c.memo,100),note:'비서가 전달한 요청이에요. 내용을 확인하고 저장하세요.'});
+}
+function aTenant(c){
+  var T='세입자를 등록할 수 없어요';
+  var name=aStr(c.name,40); if(!name) return infoBox(T,'세입자 이름이 필요해요.');
+  var phone=fmtPhone(aStr(c.phone,20)), guardian=aStr(c.guardian,40), guardianPhone=fmtPhone(aStr(c.guardianPhone,20));
+  var same=db.tenants.filter(function(t){ return normName(t.name)===normName(name) && (!digits(phone) || digits(t.phone)===digits(phone)); });
+  var note='비서가 전달한 요청이에요. 내용을 확인하고 저장하세요.';
+  if(c.room==null||c.room===''){
+    if(same.length) return infoBox('이미 등록된 세입자예요',name+' 님은 이미 세입자 목록에 있어요.');
+    return tenantForm(null,{name:name,phone:phone,guardian:guardian,guardianPhone:guardianPhone,note:note});
+  }
+  var rm=findRoom(aStr(c.room,30),aStr(c.building,40)); if(rm.err) return infoBox(T,rm.err);
+  if(activeOf(rm.room.id)) return infoBox(T,roomName(rm.room.id)+'에는 이미 입주 중인 계약이 있어요.');
+  var v={tenantId: same.length===1? same[0].id : 'new', nName:name, nPhone:phone, nGuardian:guardian, nGuardianPhone:guardianPhone};
+  var bad=[];
+  ['deposit','rent','fee'].forEach(function(k){ if(c[k]!=null){ var m=aMoney(c[k]); if(m<0) bad.push(k); else v[k]=m; } });
+  ['start','end'].forEach(function(k){ if(c[k]!=null){ var d=aDate(c[k]); if(!d) bad.push(k); else v[k]=d; } });
+  if(c.payDay!=null){ var pdv=Number(c.payDay); if(Number.isInteger(pdv)&&pdv>=1&&pdv<=31) v.payDay=pdv; else bad.push('payDay'); }
+  if(bad.length) return infoBox(T,'값이 올바르지 않아요: '+bad.join(', '));
+  if(v.start&&v.end&&v.end<v.start) return infoBox(T,'만기일이 계약일보다 빨라요.');
+  contractForm({roomId:rm.room.id,vals:v,note:note+(same.length===1?' (기존 세입자와 연결됩니다)':'')});
+}
+window.__assistant=function(c){
+  try{
+    if(!c||typeof c!=='object'||c.v!==1) return infoBox('비서 요청을 처리할 수 없어요','지원하지 않는 요청 형식이에요.');
+    var id=aStr(c.id,64), ts=Number(c.ts);
+    if(!id||!(ts>0)) return infoBox('비서 요청을 처리할 수 없어요','요청 식별 정보가 없어요.');
+    if(Math.abs(Date.now()-ts)>ASSIST_TTL) return infoBox('만료된 요청이에요','요청한 지 10분이 지났어요. 비서에게 다시 요청해 주세요.');
+    try{ if(localStorage.getItem(ASSIST_LAST)===id) return; localStorage.setItem(ASSIST_LAST,id); }catch(e){}
+    while(modals.length) closeSheet();
+    if(c.op==='record_payment') aPayment(c);
+    else if(c.op==='register_tenant') aTenant(c);
+    else infoBox('비서 요청을 처리할 수 없어요','지원하지 않는 작업이에요: '+aStr(String(c.op),30));
+  }catch(e){ infoBox('비서 요청 처리 중 오류',String(e&&e.message||e)); }
+};
+window.__assistantPoll=function(){
+  if(!(A&&A.takeCommand)) return;
+  var raw=A.takeCommand(); if(!raw) return;
+  if(raw.length>8000) return infoBox('비서 요청을 처리할 수 없어요','요청이 너무 커요.');
+  var c; try{ c=JSON.parse(raw); }catch(e){ return infoBox('비서 요청을 처리할 수 없어요','요청 형식이 올바르지 않아요.'); }
+  window.__assistant(c);
+};
+
 /* ───────── 뒤로가기 ───────── */
 var lastBack=0;
 window.__back=function(){
@@ -991,6 +1076,7 @@ window.__back=function(){
 };
 window.__rent={get db(){return db;},set db(v){db=v;save();render(true);},render:render,acts:acts};
 render(true);
+window.__assistantPoll();
 })();
 </script>
 </body>
