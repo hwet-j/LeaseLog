@@ -41,7 +41,19 @@ Java 쪽은 얇은 껍데기(`MainActivity.smali`)만 있다. 데이터는 WebVi
 ## 개발 / 테스트
 - 브라우저에서 `assets/index.html`을 열어 바로 확인 가능 (`window.Android`가 없으면 브릿지 호출은 무시/대체됨).
 - 모바일 폭(390px)에서 확인. 디버깅용 `window.__rent`(db, render, acts) 노출됨.
+- `test/assistant.test.mjs` : 비서 연동 계층 테스트 (Node + Playwright)
 - `test/flow.py` : Playwright E2E 흐름 테스트 (호실 일괄 추가 → 계약 → 납부 → 메모 → 퇴실 → 백업/복원).
+
+## AI 비서 연동 (rentmanager://assistant)
+내 AI 비서 앱(`com.hwetj.assistant`)이 `rentmanager://assistant?cmd=<URL인코딩된 JSON>` 으로 요청을 보내면, 이 앱이 **값이 채워진 기존 폼**을 연다.
+- **자동 저장 없음**: 사용자가 폼의 저장 버튼을 눌러야 반영된다. 이 앱의 데이터를 비서에게 돌려주지도 않는다 (단방향).
+- 흐름: 인텐트 → `MainActivity.handleIntent`(smali)가 `pendingCmd` 에 보관 → `window.__assistantPoll()` 호출 → JS 브릿지 `Android.takeCommand()` 로 1회 소비 → `window.__assistant(cmd)`. 콜드 스타트는 JS 초기화 끝에서 poll.
+- 요청 JSON: `{v:1, id, ts(ms), op, ...}`. `id` 가 직전 요청과 같거나 `ts` 가 10분 넘게 지나면 무시 (재시작 시 재실행 방지).
+- `op:'record_payment'`: `room`(필수, "101"/"101호"), `building`(같은 이름 호실이 여러 건물일 때), `amount`(원, 정수), `paidOn`(YYYY-MM-DD, 생략 시 오늘), `period`(YYYY-MM 청구월, 생략 시 가장 오래된 미납월), `memo`. → `openPay` 폼.
+- `op:'register_tenant'`: `name`(필수), `phone`, `guardian`, `guardianPhone`. `room` 이 있으면 입주 계약 폼(`contractForm`)을 열고 `deposit`, `rent`, `fee`, `start`, `end`, `payDay` 도 채운다. 이름+전화가 같은 기존 세입자는 재사용. `room` 이 없으면 세입자 폼만 연다.
+- 모든 입력은 `aStr/aDate/aMoney/aYm` 으로 검증하고, 화면에는 `esc()` 로만 출력한다. 오류는 `infoBox` 로 안내하고 데이터를 바꾸지 않는다.
+- 인텐트 필터는 `VIEW + DEFAULT` 만 (BROWSABLE 없음 → 웹 페이지가 링크로 호출할 수 없음).
+- 테스트: `node --test test/assistant.test.mjs` (Playwright, 웹 로직) · `test/emulator.sh` 3단계 (실제 인텐트, CI 에뮬레이터).
 
 ## 알려진 한계 / 다음에 해볼 것
 - 실기기 설치 테스트는 아직 안 함 (환경에 에뮬레이터 없음). 스모크 테스트 필요: 설치, 데이터 유지, 뒤로가기, 전화/문자 연결, 공유.
