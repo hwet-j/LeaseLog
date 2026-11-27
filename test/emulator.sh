@@ -149,6 +149,26 @@ sleep 3
 adb shell pidof $PKG >/dev/null || { echo "FAIL: app died on malformed intent"; fail=1; }
 adb logcat -d > $OUT/logcat-assistant.txt
 if grep -E "FATAL EXCEPTION|VerifyError" $OUT/logcat-assistant.txt; then echo "FAIL: crash during assistant intents"; fail=1; fi
+
+note "4) AI 비서 조회 (op:query) — 비서 앱이 없어도 앱이 죽지 않고, 조회를 처리해 답을 보내려 시도한다"
+mkq(){ python3 - "$1" "$2" <<'PY'
+import sys,json,time,urllib.parse
+c={"v":1,"id":sys.argv[1],"ts":int(time.time()*1000),"op":"query","what":sys.argv[2]}
+print('rentmanager://assistant?cmd='+urllib.parse.quote(json.dumps(c,separators=(',',':')),safe=''))
+PY
+}
+adb shell am force-stop $PKG
+adb logcat -c
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkq query-cold-1 overview)" -p $PKG
+# 조회가 처리되면 앱 안에 "비서에 전달했어요" 안내가 잠깐 뜬다 (replyAssistant 브릿지 호출 → 비서 앱이 없으면 조용히 무시)
+if wait_text "비서에 전달했어요" 90; then echo "PASS: cold-start query handled (reply sent to bridge)"; else echo "FAIL: cold-start query not handled"; top; dump_texts; fail=1; fi
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkq query-warm-2 rooms)" -p $PKG
+if wait_text "비서에 전달했어요" 30; then echo "PASS: warm-start query handled"; else echo "FAIL: warm-start query not handled"; dump_texts; fail=1; fi
+adb shell pidof $PKG >/dev/null || { echo "FAIL: app died on query"; fail=1; }
+adb logcat -d > $OUT/logcat-query.txt
+if grep -E "FATAL EXCEPTION|VerifyError|NoSuchMethodError" $OUT/logcat-query.txt; then echo "FAIL: crash during query"; fail=1; fi
+# 참고용(실패 아님): 답장 인텐트가 비서 패키지로만 향했는지
+grep -E "hwetassistant://result" $OUT/logcat-query.txt | head -3 | sed 's/^/   reply-intent: /' || true
 adb logcat -d > $OUT/logcat-test.txt
 grep -E "FATAL EXCEPTION|VerifyError" $OUT/logcat-test.txt && fail=1
 echo "RESULT fail=$fail"; exit $fail

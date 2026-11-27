@@ -46,15 +46,16 @@ Java 쪽은 얇은 껍데기(`MainActivity.smali`)만 있다. 데이터는 WebVi
 
 ## AI 비서 연동 (rentmanager://assistant)
 내 AI 비서 앱(`com.hwetj.assistant`)이 `rentmanager://assistant?cmd=<URL인코딩된 JSON>` 으로 요청을 보내면, 이 앱이 **값이 채워진 기존 폼**을 연다.
-- **자동 저장 없음**: 사용자가 폼의 저장 버튼을 눌러야 반영된다. 이 앱의 데이터를 비서에게 돌려주지도 않는다 (단방향).
+- **자동 저장 없음**: 사용자가 폼의 저장 버튼을 눌러야 반영된다. 폼/화면을 여는 요청은 데이터를 돌려주지 않고, 읽기는 `op:'query'` 로만 가능하다 (아래).
 - 흐름: 인텐트 → `MainActivity.handleIntent`(smali)가 `pendingCmd` 에 보관 → `window.__assistantPoll()` 호출 → JS 브릿지 `Android.takeCommand()` 로 1회 소비 → `window.__assistant(cmd)`. 콜드 스타트는 JS 초기화 끝에서 poll.
 - 요청 JSON: `{v:1, id, ts(ms), op, ...}`. `id` 가 직전 요청과 같거나 `ts` 가 10분 넘게 지나면 무시 (재시작 시 재실행 방지).
 - `op:'record_payment'`: `room`(필수, "101"/"101호"), `building`(같은 이름 호실이 여러 건물일 때), `amount`(원, 정수), `paidOn`(YYYY-MM-DD, 생략 시 오늘), `period`(YYYY-MM 청구월, 생략 시 가장 오래된 미납월), `memo`. → `openPay` 폼.
 - `op:'register_tenant'`: `name`(필수), `phone`, `guardian`, `guardianPhone`. `room` 이 있으면 입주 계약 폼(`contractForm`)을 열고 `deposit`, `rent`, `fee`, `start`, `end`, `payDay` 도 채운다. 이름+전화가 같은 기존 세입자는 재사용. `room` 이 없으면 세입자 폼만 연다.
 - `op:'show'` (조회용 화면 열기, 데이터 변경·응답 없음): `screen` = `income`(월별 수입, `year` 또는 `ym` 으로 연도 지정, `ym` 을 주면 그 달 막대 강조) · `payments`(납부 내역, `ym`, `filter`=all|unpaid|paid) · `home` · `rooms` · `tenants` · `utilities`. 열려 있던 폼은 닫는다.
+- `op:'query'` (**읽기 전용 조회**, 폼·화면 이동 없음, 열려 있는 폼도 닫지 않음): `what` = `overview`(이번 달 수금/청구, 호실·공실, 미납 건수·합계, 60일 내 만기) · `income`(`year`, 월별 입금/청구) · `unpaid`(미납·일부납부 건, `overdue`) · `payments`(`ym`, 그 달에 입금된 내역) · `rooms`(호실 현황) · `tenants`(계약 목록: 이름·호실·상태·기간). 결과는 JS 가 `Android.replyAssistant(id, json)` 으로 넘기고, smali 가 `hwetassistant://result?id=<id>&app=leaselog&data=<URL인코딩 JSON>` 인텐트를 **패키지 `com.hwetj.assistant` 로 고정**해 보낸다(요청에서 받은 값으로 대상을 바꾸지 않음, 비서 앱이 없으면 조용히 무시). JSON = `{ok:true,what,data}` 또는 `{ok:false,error}`, 40KB 미만, 목록은 150건까지(`truncated`). **연락처·주민/보호자 정보·계좌·메모/특이사항은 어떤 결과에도 넣지 않는다** (`test/assistant.test.mjs` 의 개인정보 테스트가 검증). 같은 id 재전송·10분 경과 요청은 답하지 않는다.
 - 모든 입력은 `aStr/aDate/aMoney/aYm` 으로 검증하고, 화면에는 `esc()` 로만 출력한다. 오류는 `infoBox` 로 안내하고 데이터를 바꾸지 않는다.
 - 인텐트 필터는 `VIEW + DEFAULT` 만 (BROWSABLE 없음 → 웹 페이지가 링크로 호출할 수 없음).
-- 테스트: `node --test test/assistant.test.mjs` (Playwright, 웹 로직) · `test/emulator.sh` 3단계 (실제 인텐트, CI 에뮬레이터).
+- 테스트: `node --test test/assistant.test.mjs` (Playwright, 웹 로직) · `test/emulator.sh` 3~4단계 (실제 인텐트·조회, CI 에뮬레이터).
 
 ## 알려진 한계 / 다음에 해볼 것
 - 실기기 설치 테스트는 아직 안 함 (환경에 에뮬레이터 없음). 스모크 테스트 필요: 설치, 데이터 유지, 뒤로가기, 전화/문자 연결, 공유.

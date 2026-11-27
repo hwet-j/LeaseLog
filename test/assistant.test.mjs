@@ -28,6 +28,7 @@ async function openApp({ twoBuildings = false } = {}) {
     window.__cmd = null;
     window.Android = {
       takeCommand() { const c = window.__cmd; window.__cmd = null; return c || ''; },
+      replyAssistant(id, json) { (window.__replies = window.__replies || []).push({ id, json }); },
       openUri() {}, share() {}, copy() {}, exit() {},
     };
   });
@@ -375,5 +376,173 @@ test('화면 열기: 열려 있던 폼을 닫고, 잘못된 값은 안내만 한
     await page.click('[data-f=ok]');
   }
   assert.equal((await db(page)).payments.length, 0);
+  await ctx.close();
+});
+
+// ───────────────────────── 조회 (op: query) ─────────────────────────
+const lastReply = (page) => page.evaluate(() => { const r = (window.__replies || []).slice(-1)[0]; return r ? { id: r.id, ...JSON.parse(r.json), raw: r.json } : null; });
+const replies = (page) => page.evaluate(() => (window.__replies || []).length);
+const ask = async (page, o) => { const c = cmd({ op: 'query', ...o }); await send(page, c); return { c, r: await lastReply(page) }; };
+
+async function seedSensitive(page) {
+  await seedPayments(page);
+  await page.evaluate(() => {
+    const db = window.__rent.db;
+    db.props[0].account = '국민 123-456-789012';
+    db.props[0].accNo = '123-456-789012';
+    db.tenants[0] = { ...db.tenants[0], resident: '실거주홍길동', guardian: '보호자박철수', guardianRel: '부', guardianPhone: '010-9999-8888', job: '회사원', car: '12가3456', refundAcct: '신한 999-88-7777', notes: [{ id: 'n1', text: '연체 습관 비밀메모', at: '2026-01-01' }] };
+    db.rooms[0].notes = [{ id: 'n2', text: '호실비밀메모', at: '2026-01-01' }];
+    db.payments[0].memo = '입금메모비밀';
+    window.__rent.db = db;
+  });
+}
+const SECRETS = ['010-1234-5678', '01012345678', '123-456-789012', '실거주홍길동', '보호자박철수', '010-9999-8888', '12가3456', '999-88-7777', '비밀메모', '입금메모비밀', 'phone', 'resident', 'guardian', 'refundAcct', 'account'];
+
+test('조회: 답을 Android.replyAssistant 로만 보내고 화면은 건드리지 않는다', async () => {
+  const { page, errors, ctx } = await openApp();
+  const before = await page.locator('header.top h1').innerText();
+  const { c, r } = await ask(page, { what: 'overview' });
+  assert.equal(r.id, c.id);
+  assert.equal(r.ok, true);
+  assert.equal(r.what, 'overview');
+  assert.equal(await sheets(page), 0, '폼/시트를 열지 않음');
+  assert.equal(await page.locator('header.top h1').innerText(), before, '화면 이동 없음');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('조회 overview: 호실·공실·이번 달 수금·미납·만기 임박', async () => {
+  const { page, ctx } = await openApp();
+  await seedPayments(page);
+  await page.evaluate(() => { const db = window.__rent.db; db.contracts[1].end = (() => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); })(); window.__rent.db = db; });
+  const { r } = await ask(page, { what: 'overview' });
+  const d = r.data;
+  assert.equal(d.month, TODAY.slice(0, 7));
+  assert.equal(d.rooms, 3); assert.equal(d.occupied, 2); assert.equal(d.vacant, 1);
+  assert.deepEqual(d.vacantRooms, [{ building: '행복빌라', room: '102' }]);
+  assert.ok(d.unpaidCount >= 2 && d.unpaidTotal > 0, '70일 전 입주 → 미납 존재');
+  assert.equal(d.expiring.length, 1);
+  assert.equal(d.expiring[0].room, '201'); assert.equal(d.expiring[0].tenant, '이영희');
+  assert.equal(typeof d.receivedThisMonth, 'number'); assert.equal(typeof d.expectedThisMonth, 'number');
+  await ctx.close();
+});
+
+test('조회 income: 월별 입금 합계와 청구 합계 (월별 수입 화면과 같은 값)', async () => {
+  const { page, ctx } = await openApp();
+  await seedPayments(page);
+  const y = Number(prevMonth.slice(0, 4));
+  const { r } = await ask(page, { what: 'income', year: y });
+  assert.equal(r.data.year, y);
+  assert.equal(r.data.months.length, 12);
+  assert.equal(r.data.months.find((m) => m.ym === prevMonth).received, 500000);
+  assert.equal(r.data.months.find((m) => m.ym === `${y}-01`).received, 100000 + (prevMonth === `${y}-01` ? 500000 : 0));
+  // 화면의 연간 합계와 일치
+  await send(page, cmd({ op: 'show', screen: 'income', year: y }));
+  const shown = await page.locator('.big').first().innerText();
+  const sum = r.data.months.reduce((a, m) => a + m.received, 0);
+  assert.equal(shown.replace(/[^0-9]/g, ''), String(sum));
+  const noYear = await ask(page, { what: 'income' });
+  assert.equal(noYear.r.data.year, new Date().getFullYear());
+  await ctx.close();
+});
+
+test('조회 unpaid: 미납·일부납부만, 연체 여부 포함', async () => {
+  const { page, ctx } = await openApp();
+  await page.evaluate(() => { const db = window.__rent.db; const c = db.contracts[0]; const ym = c.start.slice(0, 7); db.payments = [{ id: 'x', contractId: c.id, ym, paidOn: c.start, amount: 100000, memo: '' }]; window.__rent.db = db; });
+  const { r } = await ask(page, { what: 'unpaid' });
+  const list = r.data;
+  assert.ok(list.length >= 2);
+  const part = list.find((x) => x.room === '101' && x.paid === 100000);
+  assert.ok(part, '일부납부 건 포함');
+  assert.equal(part.charged, 500000); assert.equal(part.remaining, 400000); assert.equal(part.overdue, true);
+  assert.match(part.due, /^\d{4}-\d{2}-\d{2}$/); assert.match(part.ym, /^\d{4}-\d{2}$/);
+  assert.equal(part.tenant, '김민수'); assert.equal(part.building, '행복빌라');
+  await ctx.close();
+});
+
+test('조회 payments: 지정한 달에 입금된 내역 (기본은 이번 달)', async () => {
+  const { page, ctx } = await openApp();
+  await seedPayments(page);
+  const { r } = await ask(page, { what: 'payments', ym: prevMonth });
+  assert.deepEqual(r.data.map((x) => [x.date, x.room, x.tenant, x.amount]), [[`${prevMonth}-05`, '101', '김민수', 300000], [`${prevMonth}-20`, '201', '이영희', 200000]]);
+  const none = await ask(page, { what: 'payments' });
+  assert.deepEqual(none.r.data.filter((x) => x.date.slice(0, 7) !== TODAY.slice(0, 7)), []);
+  const bad = await ask(page, { what: 'payments', ym: '2026-13' });
+  assert.equal(bad.r.ok, false);
+  await ctx.close();
+});
+
+test('조회 rooms / tenants: 현황 요약 (연락처 없음)', async () => {
+  const { page, ctx } = await openApp();
+  const rooms = (await ask(page, { what: 'rooms' })).r.data;
+  assert.equal(rooms.length, 3);
+  const r101 = rooms.find((x) => x.room === '101');
+  assert.deepEqual({ s: r101.status, t: r101.tenant, rent: r101.rent, fee: r101.fee, dep: r101.deposit }, { s: 'occupied', t: '김민수', rent: 450000, fee: 50000, dep: 5000000 });
+  assert.equal(r101.start, START); assert.equal(r101.payDay, Number(START.slice(8)));
+  const r102 = rooms.find((x) => x.room === '102');
+  assert.deepEqual(r102, { building: '행복빌라', room: '102', status: 'vacant' });
+  const tenants = (await ask(page, { what: 'tenants' })).r.data;
+  assert.deepEqual(tenants.map((x) => [x.name, x.room, x.status]), [['김민수', '101', 'active'], ['이영희', '201', 'active']]);
+  await ctx.close();
+});
+
+test('조회 개인정보: 연락처·주민/보호자·계좌·메모는 어떤 결과에도 없다', async () => {
+  const { page, ctx } = await openApp();
+  await seedSensitive(page);
+  for (const what of ['overview', 'income', 'unpaid', 'payments', 'rooms', 'tenants']) {
+    const { r } = await ask(page, { what, ym: prevMonth });
+    assert.equal(r.ok, true, what);
+    for (const sct of SECRETS) assert.ok(!r.raw.includes(sct), `${what} 결과에 "${sct}" 이(가) 들어 있음`);
+  }
+  await ctx.close();
+});
+
+test('조회: 잘못된 조회·값은 ok:false 로 답하고, 같은 id 재전송은 무시한다', async () => {
+  const { page, ctx } = await openApp();
+  assert.equal((await ask(page, { what: 'secrets' })).r.ok, false);
+  assert.equal((await ask(page, {})).r.ok, false);
+  assert.equal((await ask(page, { what: 'income', year: 1999 })).r.ok, false);
+  const c = cmd({ op: 'query', what: 'rooms' });
+  await send(page, c);
+  const n = await replies(page);
+  await send(page, c); // 같은 id
+  assert.equal(await replies(page), n, '재전송은 답하지 않음');
+  await send(page, { ...cmd({ op: 'query', what: 'rooms' }), ts: Date.now() - 11 * 60 * 1000 });
+  assert.equal(await replies(page), n, '만료된 요청은 답하지 않음');
+  await ctx.close();
+});
+
+test('조회: 열려 있는 폼을 닫지 않고, 결과 크기는 제한된다', async () => {
+  const { page, ctx } = await openApp();
+  await send(page, cmd({ op: 'record_payment', room: '101', amount: 450000 }));
+  assert.equal(await sheets(page), 1);
+  await ask(page, { what: 'overview' });
+  assert.equal(await sheets(page), 1, '조회가 작성 중이던 폼을 닫지 않음');
+  await page.click('[data-f=cancel]');
+  await page.evaluate(() => {
+    const db = window.__rent.db;
+    for (let i = 0; i < 400; i++) db.rooms.push({ id: 'z' + i, propId: 'p1', name: 'Z' + i, kind: '', notes: [] });
+    window.__rent.db = db;
+  });
+  const { r } = await ask(page, { what: 'rooms' });
+  assert.equal(r.ok, true);
+  assert.equal(r.data.truncated, true);
+  assert.equal(r.data.items.length, 150);
+  assert.ok(r.raw.length < 40000);
+  await ctx.close();
+});
+
+test('조회: 콜드 스타트(대기 중인 요청)에서도 답한다', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+  const page = await ctx.newPage();
+  await page.addInitScript((raw) => {
+    let cmd = raw;
+    window.Android = { takeCommand() { const r = cmd; cmd = ''; return r; }, replyAssistant(id, json) { (window.__replies = window.__replies || []).push({ id, json }); }, openUri() {}, share() {}, copy() {}, exit() {} };
+  }, JSON.stringify(cmd({ op: 'query', what: 'overview' })));
+  await page.goto(URL);
+  const r = await lastReply(page);
+  assert.equal(r.ok, true);
+  assert.equal(r.what, 'overview');
+  assert.equal(await sheets(page), 0);
   await ctx.close();
 });
