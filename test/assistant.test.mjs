@@ -293,3 +293,87 @@ test('앱 시작 시 대기 중인 요청이 있으면 바로 처리한다 (콜�
   assert.equal(await page.inputValue('#f_name'), '정하늘');
   await ctx.close();
 });
+
+// ───────────────────────── 화면 열기 (op: show) ─────────────────────────
+const prevMonth = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return ymd(d).slice(0, 7); })();
+const header = (page) => page.locator('header.top h1').innerText();
+
+async function seedPayments(page) {
+  // 지난달 두 건(300,000 + 200,000), 올해 다른 달 한 건(100,000)
+  await page.evaluate(({ prevMonth }) => {
+    const db = window.__rent.db;
+    const y = prevMonth.slice(0, 4);
+    db.payments = [
+      { id: 'p1', contractId: 'c101', ym: prevMonth, paidOn: `${prevMonth}-05`, amount: 300000, memo: '' },
+      { id: 'p2', contractId: 'c201', ym: prevMonth, paidOn: `${prevMonth}-20`, amount: 200000, memo: '' },
+      { id: 'p3', contractId: 'c101', ym: `${y}-01`, paidOn: `${y}-01-15`, amount: 100000, memo: '' },
+    ];
+    window.__rent.db = db;
+  }, { prevMonth });
+}
+
+test('화면 열기: 월별 수입 화면을 해당 연도로 열고 요청한 달을 강조한다', async () => {
+  const { page, errors, ctx } = await openApp();
+  await seedPayments(page);
+  await send(page, cmd({ op: 'show', screen: 'income', ym: prevMonth }));
+  assert.equal(await header(page), '월별 수입');
+  assert.equal(await page.locator('.mnav b').innerText(), `${prevMonth.slice(0, 4)}년`);
+  const hi = page.locator('.mb.hi');
+  assert.equal(await hi.count(), 1, '강조된 달은 하나');
+  assert.equal((await hi.locator('.lb').innerText()), `${Number(prevMonth.slice(5, 7))}월`);
+  assert.match(await hi.locator('.vl').innerText(), /500,000원/);
+  assert.equal((await db(page)).payments.length, 3, '조회만 하고 데이터는 바꾸지 않음');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('화면 열기: 월 없이 연도만 주면 강조 없이 그 연도, 연도 이동하면 강조 해제', async () => {
+  const { page, ctx } = await openApp();
+  await send(page, cmd({ op: 'show', screen: 'income', year: 2024 }));
+  assert.equal(await page.locator('.mnav b').innerText(), '2024년');
+  assert.equal(await page.locator('.mb.hi').count(), 0);
+  await send(page, cmd({ op: 'show', screen: 'income', ym: '2026-03' }));
+  assert.equal(await page.locator('.mb.hi').count(), 1);
+  await page.click('[data-act=yr][data-n="1"]');
+  assert.equal(await page.locator('.mb.hi').count(), 0, '다른 연도로 가면 강조가 사라져야 함');
+  await ctx.close();
+});
+
+test('화면 열기: 납부 내역은 지정한 월·필터로 열린다', async () => {
+  const { page, ctx } = await openApp();
+  await send(page, cmd({ op: 'show', screen: 'payments', ym: '2026-03', filter: 'unpaid' }));
+  assert.equal(await header(page), '납부 내역');
+  assert.equal(await page.locator('.mnav b').innerText(), '2026년 3월');
+  assert.equal(await page.locator('.seg button.on').innerText(), '미납·예정');
+  await ctx.close();
+});
+
+test('화면 열기: 홈·호실·세입자·공과금 화면', async () => {
+  const { page, ctx } = await openApp();
+  for (const [screen, title] of [['rooms', '호실'], ['tenants', '세입자'], ['utilities', '공과금'], ['home', '월세 관리']]) {
+    await send(page, cmd({ op: 'show', screen }));
+    assert.equal(await header(page), title, screen);
+  }
+  await ctx.close();
+});
+
+test('화면 열기: 열려 있던 폼을 닫고, 잘못된 값은 안내만 한다', async () => {
+  const { page, ctx } = await openApp();
+  await send(page, cmd({ op: 'record_payment', room: '101', amount: 1000 }));
+  assert.equal(await sheets(page), 1);
+  await send(page, cmd({ op: 'show', screen: 'income' }));
+  assert.equal(await sheets(page), 0, '열려 있던 폼은 닫혀야 함');
+  for (const [c, re] of [
+    [{ screen: 'delete_all' }, /지원하지 않는 화면/],
+    [{}, /지원하지 않는 화면/],
+    [{ screen: 'income', ym: '2026-13' }, /월 형식/],
+    [{ screen: 'income', year: 1999 }, /연도/],
+    [{ screen: 'payments', filter: 'x' }, /필터/],
+  ]) {
+    await send(page, cmd({ op: 'show', ...c }));
+    assert.match(await page.locator('.sheet').innerText(), re, JSON.stringify(c));
+    await page.click('[data-f=ok]');
+  }
+  assert.equal((await db(page)).payments.length, 0);
+  await ctx.close();
+});

@@ -97,6 +97,8 @@ input[type=checkbox]{width:22px;height:22px;min-height:0;accent-color:var(--pri)
 .mb .tr{flex:1;height:14px;background:var(--gray-l);border-radius:99px;overflow:hidden}
 .mb .tr i{display:block;height:100%;background:var(--pri);border-radius:99px}
 .mb .vl{flex:none;width:92px;text-align:right;font-size:13.5px;font-variant-numeric:tabular-nums}
+.mb.hi{background:var(--pri-l,rgba(0,0,0,.06));border-radius:10px;margin:0 -6px;padding:5px 6px}
+.mb.hi .lb,.mb.hi .vl{font-weight:800;color:var(--ink)}
 .seg{display:flex;gap:6px;margin:8px 0}
 .seg button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:11px;padding:8px 4px;font-weight:700;color:var(--sub);font-size:14px}
 .seg button.on{border-color:var(--pri);background:var(--pri-l);color:var(--pri-d)}
@@ -513,7 +515,7 @@ function viewMore(){
    '<div class="row tap" data-act="export"><div class="grow"><b>내보내기</b><div class="sub">납부·계약·공과금을 엑셀용으로 복사/공유</div></div><span class="sub">›</span></div>'+
    '<div class="row tap" data-act="stats"><div class="grow"><b>월별 수입</b><div class="sub">월별로 받은 월세 합계</div></div><span class="sub">›</span></div>'+
    '<div class="row tap" data-act="backup"><div class="grow"><b>백업 · 복원</b><div class="sub">데이터 내보내기 / 불러오기</div></div><span class="sub">›</span></div></div>'+
-   '<div class="sub" style="text-align:center;margin-top:18px">월세 관리 v1.5 · 모든 데이터는 이 휴대폰에만 저장돼요</div>';
+   '<div class="sub" style="text-align:center;margin-top:18px">월세 관리 v1.6 · 모든 데이터는 이 휴대폰에만 저장돼요</div>';
 }
 function viewProps(){
   if(!db.props.length) return '<div class="empty">등록된 건물이 없어요.<br>호실을 추가하면 기본 건물이 자동으로 만들어져요.</div>';
@@ -525,7 +527,7 @@ function viewStats(){
   db.payments.forEach(function(p){ if(p.paidOn && p.paidOn.slice(0,4)==String(y)) mon[Number(p.paidOn.slice(5,7))-1]+=n0(p.amount); });
   var max=Math.max.apply(null,mon.concat([1])), tot=mon.reduce(function(a,b){return a+b;},0);
   var h='<div class="mnav"><button class="ib" data-act="yr" data-n="-1">◀</button><b>'+y+'년</b><button class="ib" data-act="yr" data-n="1">▶</button></div>';
-  h+='<div class="card"><div class="sub">연간 입금 합계</div><div class="big">'+won(tot)+'</div>'+mon.map(function(v,i){ return '<div class="mb"><span class="lb">'+(i+1)+'월</span><span class="tr"><i style="width:'+Math.round(v/max*100)+'%"></i></span><span class="vl">'+(v?won(v):'-')+'</span></div>'; }).join('')+'</div>';
+  h+='<div class="card"><div class="sub">연간 입금 합계</div><div class="big">'+won(tot)+'</div>'+mon.map(function(v,i){ return '<div class="mb'+(pf.hiY===y&&pf.hi===i?' hi':'')+'"><span class="lb">'+(i+1)+'월</span><span class="tr"><i style="width:'+Math.round(v/max*100)+'%"></i></span><span class="vl">'+(v?won(v):'-')+'</span></div>'; }).join('')+'</div>';
   var ar=arrears(); var tt=ar.reduce(function(s,x){return s+x.s.remain;},0);
   h+='<div class="card"><div class="sub">현재 누적 미납액</div><div class="big" style="color:'+(tt?'var(--red)':'var(--ink)')+'">'+won(tt)+'</div><div class="sub">'+ar.length+'건</div></div>';
   return h;
@@ -1022,6 +1024,25 @@ function aPayment(c){
   }
   openPay(ct.id,ym,{paidOn:paidOn,amount:amount,memo:aStr(c.memo,100),note:'비서가 전달한 요청이에요. 내용을 확인하고 저장하세요.'});
 }
+var SHOW_TABS=['home','rooms','tenants'];
+/** 화면 열기: 데이터를 바꾸지 않는 조회용 요청 (월 수입, 납부 내역 등). 열어 주기만 하고 비서에게 값을 돌려주지 않는다. */
+function aShow(c){
+  var T='화면을 열 수 없어요', s=aStr(c.screen,20);
+  var ym=null, year=null;
+  if(c.ym!=null){ ym=aYm(c.ym); if(!ym) return infoBox(T,'월 형식이 올바르지 않아요. (YYYY-MM)'); }
+  if(c.year!=null){ year=Number(c.year); if(!(Number.isInteger(year)&&year>=2000&&year<=2100)) return infoBox(T,'연도가 올바르지 않아요.'); }
+  if(s==='income'){
+    var y=year||(ym? Number(ym.slice(0,4)) : new Date().getFullYear());
+    pf.year=y; pf.hiY=ym? y : null; pf.hi=ym&&Number(ym.slice(0,4))===y? Number(ym.slice(5,7))-1 : null;
+    nav.tab='more'; nav.stack=[{t:'stats'}]; render(true);
+  } else if(s==='payments'){
+    pf.ym=ym||today().slice(0,7);
+    if(c.filter!=null){ if(['all','unpaid','paid'].indexOf(c.filter)<0) return infoBox(T,'필터가 올바르지 않아요. (all, unpaid, paid)'); pf.filter=c.filter; }
+    setTab('pay');
+  } else if(SHOW_TABS.indexOf(s)>=0){ setTab(s); }
+  else if(s==='utilities'){ nav.tab='more'; nav.stack=[{t:'utils'}]; render(true); }
+  else infoBox(T,'지원하지 않는 화면이에요: '+(s||'(없음)'));
+}
 function aTenant(c){
   var T='세입자를 등록할 수 없어요';
   var name=aStr(c.name,40); if(!name) return infoBox(T,'세입자 이름이 필요해요.');
@@ -1053,6 +1074,7 @@ window.__assistant=function(c){
     while(modals.length) closeSheet();
     if(c.op==='record_payment') aPayment(c);
     else if(c.op==='register_tenant') aTenant(c);
+    else if(c.op==='show') aShow(c);
     else infoBox('비서 요청을 처리할 수 없어요','지원하지 않는 작업이에요: '+aStr(String(c.op),30));
   }catch(e){ infoBox('비서 요청 처리 중 오류',String(e&&e.message||e)); }
 };

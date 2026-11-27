@@ -51,6 +51,7 @@ Java 쪽은 얇은 껍데기(`MainActivity.smali`)만 있다. 데이터는 WebVi
 - 요청 JSON: `{v:1, id, ts(ms), op, ...}`. `id` 가 직전 요청과 같거나 `ts` 가 10분 넘게 지나면 무시 (재시작 시 재실행 방지).
 - `op:'record_payment'`: `room`(필수, "101"/"101호"), `building`(같은 이름 호실이 여러 건물일 때), `amount`(원, 정수), `paidOn`(YYYY-MM-DD, 생략 시 오늘), `period`(YYYY-MM 청구월, 생략 시 가장 오래된 미납월), `memo`. → `openPay` 폼.
 - `op:'register_tenant'`: `name`(필수), `phone`, `guardian`, `guardianPhone`. `room` 이 있으면 입주 계약 폼(`contractForm`)을 열고 `deposit`, `rent`, `fee`, `start`, `end`, `payDay` 도 채운다. 이름+전화가 같은 기존 세입자는 재사용. `room` 이 없으면 세입자 폼만 연다.
+- `op:'show'` (조회용 화면 열기, 데이터 변경·응답 없음): `screen` = `income`(월별 수입, `year` 또는 `ym` 으로 연도 지정, `ym` 을 주면 그 달 막대 강조) · `payments`(납부 내역, `ym`, `filter`=all|unpaid|paid) · `home` · `rooms` · `tenants` · `utilities`. 열려 있던 폼은 닫는다.
 - 모든 입력은 `aStr/aDate/aMoney/aYm` 으로 검증하고, 화면에는 `esc()` 로만 출력한다. 오류는 `infoBox` 로 안내하고 데이터를 바꾸지 않는다.
 - 인텐트 필터는 `VIEW + DEFAULT` 만 (BROWSABLE 없음 → 웹 페이지가 링크로 호출할 수 없음).
 - 테스트: `node --test test/assistant.test.mjs` (Playwright, 웹 로직) · `test/emulator.sh` 3단계 (실제 인텐트, CI 에뮬레이터).
