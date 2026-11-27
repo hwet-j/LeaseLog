@@ -169,6 +169,21 @@ adb logcat -d > $OUT/logcat-query.txt
 if grep -E "FATAL EXCEPTION|VerifyError|NoSuchMethodError" $OUT/logcat-query.txt; then echo "FAIL: crash during query"; fail=1; fi
 # 참고용(실패 아님): 답장 인텐트가 비서 패키지로만 향했는지
 grep -E "hwetassistant://result" $OUT/logcat-query.txt | head -3 | sed 's/^/   reply-intent: /' || true
+
+note "5) 백그라운드 읽기 제공자 (AssistantProvider) — 등록돼 있고, 비서 앱이 아닌 호출자(shell)는 거절된다"
+adb logcat -c
+adb shell content call --uri content://com.rentmanager.app.assistant --method snapshot > $OUT/provider-call.txt 2>&1 || true
+cat $OUT/provider-call.txt | sed 's/^/   provider: /'
+if grep -q "error=forbidden" $OUT/provider-call.txt; then echo "PASS: provider registered and caller-gated (shell -> forbidden)"; else echo "FAIL: provider did not answer forbidden"; fail=1; fi
+if grep -q "json=" $OUT/provider-call.txt; then echo "FAIL: provider leaked snapshot to a non-assistant caller"; fail=1; fi
+adb shell content call --uri content://com.rentmanager.app.assistant --method nope > $OUT/provider-call2.txt 2>&1 || true
+# 호출자 검사가 먼저가 아니라 메서드 검사가 먼저이므로 unknown_method (어느 쪽이든 데이터는 없다)
+grep -q "json=" $OUT/provider-call2.txt && { echo "FAIL: unknown method returned data"; fail=1; }
+adb shell content query --uri content://com.rentmanager.app.assistant > $OUT/provider-query.txt 2>&1 || true
+grep -qi "row" $OUT/provider-query.txt && { echo "FAIL: provider exposed rows via query"; fail=1; }
+adb shell pidof $PKG >/dev/null || { echo "FAIL: app died on provider call"; fail=1; }
+adb logcat -d > $OUT/logcat-provider.txt
+if grep -E "FATAL EXCEPTION|VerifyError|NoSuchMethodError" $OUT/logcat-provider.txt; then echo "FAIL: crash during provider calls"; fail=1; fi
 adb logcat -d > $OUT/logcat-test.txt
 grep -E "FATAL EXCEPTION|VerifyError" $OUT/logcat-test.txt && fail=1
 echo "RESULT fail=$fail"; exit $fail

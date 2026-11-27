@@ -320,6 +320,63 @@
     goto :goto_0
 .end method
 
+.method public saveSnapshot(Ljava/lang/String;)V
+    .locals 5
+    .annotation runtime Landroid/webkit/JavascriptInterface;
+    .end annotation
+
+    if-eqz p1, :goto_0
+
+    :try_start_0
+    const-string v0, "UTF-8"
+
+    invoke-virtual {p1, v0}, Ljava/lang/String;->getBytes(Ljava/lang/String;)[B
+
+    move-result-object v0
+
+    array-length v1, v0
+
+    const v2, 0x61a80
+
+    if-gt v1, v2, :goto_0
+
+    invoke-virtual {p0}, Landroid/content/ContextWrapper;->getFilesDir()Ljava/io/File;
+
+    move-result-object v2
+
+    new-instance v1, Ljava/io/File;
+
+    const-string v3, "assistant_snapshot.json.tmp"
+
+    invoke-direct {v1, v2, v3}, Ljava/io/File;-><init>(Ljava/io/File;Ljava/lang/String;)V
+
+    new-instance v3, Ljava/io/FileOutputStream;
+
+    invoke-direct {v3, v1}, Ljava/io/FileOutputStream;-><init>(Ljava/io/File;)V
+
+    invoke-virtual {v3, v0}, Ljava/io/FileOutputStream;->write([B)V
+
+    invoke-virtual {v3}, Ljava/io/FileOutputStream;->close()V
+
+    new-instance v3, Ljava/io/File;
+
+    const-string v4, "assistant_snapshot.json"
+
+    invoke-direct {v3, v2, v4}, Ljava/io/File;-><init>(Ljava/io/File;Ljava/lang/String;)V
+
+    invoke-virtual {v1, v3}, Ljava/io/File;->renameTo(Ljava/io/File;)Z
+    :try_end_0
+    .catch Ljava/lang/Exception; {:try_start_0 .. :try_end_0} :catch_0
+
+    :goto_0
+    return-void
+
+    :catch_0
+    move-exception v0
+
+    goto :goto_0
+.end method
+
 .method public openUri(Ljava/lang/String;)V
     .locals 3
     .annotation runtime Landroid/webkit/JavascriptInterface;

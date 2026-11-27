@@ -19,19 +19,20 @@ before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser.close(); });
 
 /** 호실 101(입주중), 102(공실), 201(입주중), 다른 건물의 101 도 있는 상태의 앱을 연다. */
-async function openApp({ twoBuildings = false } = {}) {
+async function openApp({ twoBuildings = false, snap = true } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, locale: 'ko-KR' });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.addInitScript(() => {
+  await page.addInitScript((snap) => {
     window.__cmd = null;
     window.Android = {
+      ...(snap ? { saveSnapshot(json) { (window.__snaps = window.__snaps || []).push(json); } } : {}),
       takeCommand() { const c = window.__cmd; window.__cmd = null; return c || ''; },
       replyAssistant(id, json) { (window.__replies = window.__replies || []).push({ id, json }); },
       openUri() {}, share() {}, copy() {}, exit() {},
     };
-  });
+  }, snap);
   await page.goto(URL);
   await page.evaluate(({ START, twoBuildings }) => {
     const props = [{ id: 'p1', name: '행복빌라', addr: '', account: '', memo: '' }];
@@ -543,6 +544,128 @@ test('조회: 콜드 스타트(대기 중인 요청)에서도 답한다', async 
   const r = await lastReply(page);
   assert.equal(r.ok, true);
   assert.equal(r.what, 'overview');
+  assert.equal(await sheets(page), 0);
+  await ctx.close();
+});
+
+// ───────────────────────── 백그라운드 읽기용 스냅샷 ─────────────────────────
+const snapshot = (page) => page.evaluate(() => { const o = window.__assistantSnapshot(); return { o, raw: JSON.stringify(o) }; });
+const snaps = (page) => page.evaluate(() => (window.__snaps || []).map((j) => JSON.parse(j)));
+
+test('스냅샷: 개인정보(연락처·주민/보호자·계좌·메모)는 어디에도 없다', async () => {
+  const { page, errors, ctx } = await openApp();
+  await seedSensitive(page);
+  const { raw } = await snapshot(page);
+  for (const sct of SECRETS) assert.ok(!raw.includes(sct), `스냅샷에 "${sct}" 이(가) 들어 있음`);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('스냅샷: 각 값이 op:query 의 data 와 정확히 같다', async () => {
+  const { page, ctx } = await openApp();
+  await seedPayments(page);
+  const { o } = await snapshot(page);
+  assert.equal(o.v, 1);
+  assert.equal(o.app, 'leaselog');
+  assert.ok(Math.abs(o.ts - Date.now()) < 60_000);
+  const year = Number(prevMonth.slice(0, 4));
+  const cases = [
+    ['overview', {}, o.data.overview],
+    ['income', { year }, o.data.income[String(year)]],
+    ['unpaid', {}, o.data.unpaid],
+    ['payments', { ym: prevMonth }, o.data.payments[prevMonth]],
+    ['rooms', {}, o.data.rooms],
+    ['tenants', {}, o.data.tenants],
+  ];
+  for (const [what, extra, snapVal] of cases) {
+    const { r } = await ask(page, { what, ...extra });
+    assert.deepEqual(snapVal, r.data, `${what}: 스냅샷과 조회 결과가 달라요`);
+  }
+  assert.ok(o.data.payments[prevMonth].length > 0, '입금이 있는 달이 들어 있음');
+  assert.ok(o.data.income[String(new Date().getFullYear())], '올해 수입 포함');
+  assert.ok(o.data.payments[TODAY.slice(0, 7)] !== undefined, '이번 달 납부 내역 포함');
+  await ctx.close();
+});
+
+test('스냅샷: 입금이 있는 연도는 최대 5개, 월은 최대 24개이고 크기 제한을 지킨다', async () => {
+  const { page, ctx } = await openApp();
+  await page.evaluate(() => {
+    const db = window.__rent.db;
+    for (let i = 0; i < 40; i++) {
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i * 3);
+      const ym = d.toISOString().slice(0, 7);
+      db.payments.push({ id: 'x' + i, contractId: 'c101', ym, paidOn: ym + '-05', amount: 100000 + i, memo: '' });
+    }
+    window.__rent.db = db;
+  });
+  const { o, raw } = await snapshot(page);
+  assert.ok(Object.keys(o.data.income).length <= 5);
+  assert.ok(Object.keys(o.data.payments).length <= 24);
+  assert.ok(Buffer.byteLength(raw, 'utf8') <= 350000);
+  await ctx.close();
+});
+
+test('스냅샷: 목록이 아주 커도 350KB 이하로 줄어든다', async () => {
+  const { page, ctx } = await openApp();
+  await page.evaluate(() => {
+    const db = window.__rent.db;
+    const pad = (n) => String(n).padStart(2, '0');
+    for (let i = 0; i < 400; i++) {
+      db.rooms.push({ id: 'rr' + i, propId: 'p1', name: '가나다라마바사아자차카타파하'.repeat(3) + i, kind: '', notes: [] });
+    }
+    for (let m = 0; m < 24; m++) {
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - m);
+      const ym = d.getFullYear() + '-' + pad(d.getMonth() + 1);
+      for (let k = 0; k < 150; k++) db.payments.push({ id: `b${m}-${k}`, contractId: k % 2 ? 'c101' : 'c201', ym, paidOn: ym + '-' + pad(1 + (k % 27)), amount: 123456, memo: '' });
+    }
+    window.__rent.db = db;
+  });
+  const { o, raw } = await snapshot(page);
+  assert.ok(Buffer.byteLength(raw, 'utf8') <= 350000, 'bytes=' + Buffer.byteLength(raw, 'utf8'));
+  assert.ok(Object.keys(o.data.payments).length >= 1);
+  await ctx.close();
+});
+
+test('스냅샷: 시작 후 한 번, 저장할 때마다 1초 디바운스로 Android.saveSnapshot 을 호출한다', async () => {
+  const { page, errors, ctx } = await openApp();
+  await page.waitForFunction(() => (window.__snaps || []).length >= 1, null, { timeout: 5000 });
+  const base = (await snaps(page)).length;
+  // 짧은 시간에 여러 번 저장해도 한 번만
+  await page.evaluate(() => { for (let i = 0; i < 5; i++) { const db = window.__rent.db; db.meta.lastBackup = 'x' + i; window.__rent.db = db; } });
+  assert.equal((await snaps(page)).length, base, '디바운스 중에는 아직 호출하지 않음');
+  await page.waitForFunction((b) => (window.__snaps || []).length > b, base, { timeout: 5000 });
+  await page.waitForTimeout(1500);
+  assert.equal((await snaps(page)).length, base + 1, '여러 번 저장해도 한 번만 호출');
+  const last = (await snaps(page)).slice(-1)[0];
+  assert.equal(last.app, 'leaselog');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('스냅샷: 화면이 다시 보일 때(visibilitychange)도 갱신한다', async () => {
+  const { page, ctx } = await openApp();
+  await page.waitForFunction(() => (window.__snaps || []).length >= 1, null, { timeout: 5000 });
+  await page.waitForTimeout(1300);
+  const base = (await snaps(page)).length;
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.waitForFunction((b) => (window.__snaps || []).length > b, base, { timeout: 5000 });
+  await ctx.close();
+});
+
+test('스냅샷: Android 브릿지(saveSnapshot)가 없어도 오류 없이 동작한다 (브라우저/구버전)', async () => {
+  const { page, errors, ctx } = await openApp({ snap: false });
+  await page.evaluate(() => { const db = window.__rent.db; db.meta.lastBackup = 'y'; window.__rent.db = db; });
+  await page.waitForTimeout(1300);
+  assert.equal(await page.evaluate(() => (window.__snaps || []).length), 0);
+  assert.equal(await page.evaluate(() => typeof window.__assistantSnapshot().data.overview), 'object');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('스냅샷: 비서 조회(op:query)는 그대로 동작한다 (폴백 경로)', async () => {
+  const { page, ctx } = await openApp();
+  const { r } = await ask(page, { what: 'overview' });
+  assert.equal(r.ok, true);
   assert.equal(await sheets(page), 0);
   await ctx.close();
 });

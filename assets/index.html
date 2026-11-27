@@ -128,7 +128,7 @@ function load(){
   return blank();
 }
 var db = load();
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ toast('저장에 실패했어요'); } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); snapSoon(); }catch(e){ toast('저장에 실패했어요'); } }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function byId(arr,id){ for(var i=0;i<arr.length;i++) if(arr[i].id===id) return arr[i]; return null; }
 
@@ -1145,6 +1145,38 @@ function aQuery(id,c){
   }catch(e){ return qSend(id,{ok:false,error:'조회 중 오류가 났어요.'}); }
   qSend(id,{ok:true,what:what,data:data});
 }
+/* ───────── 비서 스냅샷 (백그라운드 읽기) ─────────
+ * 비서 앱이 이 앱을 열지 않고도 읽을 수 있도록, 조회 결과를 미리 계산해 Android.saveSnapshot 으로 파일에 저장한다.
+ * 파일은 AssistantProvider(ContentProvider)가 비서 앱(com.hwetj.assistant)에게만 내준다.
+ * 값은 op:'query' 의 data 와 정확히 같고, 연락처·주민번호·보호자·계좌·메모는 들어가지 않는다. */
+var SNAP_MAX=350000, SNAP_YEARS=5, SNAP_MONTHS=24, snapTimer=null;
+function utf8len(s){ try{ return unescape(encodeURIComponent(s)).length; }catch(e){ return s.length*3; } }
+function buildSnapshot(){
+  var cy=new Date().getFullYear(), cur=today().slice(0,7), ys={}, ms={}; ys[cy]=1; ms[cur]=1;
+  db.payments.forEach(function(p){ if(!p.paidOn) return; var y=Number(p.paidOn.slice(0,4)); if(y>=2000&&y<=2100) ys[y]=1; if(/^\d{4}-\d{2}/.test(p.paidOn)) ms[p.paidOn.slice(0,7)]=1; });
+  var years=Object.keys(ys).map(Number).sort(function(a,b){return b-a;}).slice(0,SNAP_YEARS);
+  var months=Object.keys(ms).sort().reverse().slice(0,SNAP_MONTHS);
+  var data={overview:qOverview(), income:{}, unpaid:qUnpaid(), payments:{}, rooms:qRooms(), tenants:qTenants()};
+  years.forEach(function(y){ data.income[String(y)]=qIncome(y); });
+  months.forEach(function(m){ data.payments[m]=qPayments(m); });
+  var snap={v:1,app:'leaselog',ts:Date.now(),data:data};
+  while(months.length>1 && utf8len(JSON.stringify(snap))>SNAP_MAX) delete data.payments[months.pop()];
+  return snap;
+}
+function snapNow(){
+  snapTimer=null;
+  if(!(A&&A.saveSnapshot)) return;
+  try{ A.saveSnapshot(JSON.stringify(buildSnapshot())); }catch(e){}
+}
+function snapSoon(){
+  if(!(A&&A.saveSnapshot)) return;
+  if(snapTimer) clearTimeout(snapTimer);
+  snapTimer=setTimeout(snapNow,1000);
+}
+window.__assistantSnapshot=buildSnapshot;
+document.addEventListener('visibilitychange',function(){ if(!document.hidden) snapSoon(); });
+window.addEventListener('focus',snapSoon);
+
 window.__assistant=function(c){
   try{
     if(!c||typeof c!=='object'||c.v!==1) return infoBox('비서 요청을 처리할 수 없어요','지원하지 않는 요청 형식이에요.');
@@ -1181,6 +1213,7 @@ window.__back=function(){
 window.__rent={get db(){return db;},set db(v){db=v;save();render(true);},render:render,acts:acts};
 render(true);
 window.__assistantPoll();
+snapSoon();
 })();
 </script>
 </body>
