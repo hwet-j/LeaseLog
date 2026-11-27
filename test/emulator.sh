@@ -34,6 +34,18 @@ PY
   note "tap '$1' at $xy"; adb shell input tap $xy; return 0
 }
 has_text(){ ui; grep -q "$1" $OUT/ui.xml; }
+# 소프트웨어 렌더링 에뮬레이터는 첫 실행이 느리므로 고정 sleep 대신 최대 $2 초까지 기다린다.
+wait_text(){ local t=0; while [ $t -lt ${2:-60} ]; do ui && grep -q "$1" $OUT/ui.xml && return 0; sleep 3; t=$((t+3)); done; return 1; }
+wait_top(){ local t=0; while [ $t -lt ${1:-60} ]; do top | grep -q "$PKG" && return 0; sleep 3; t=$((t+3)); done; return 1; }
+dump_texts(){ python3 - <<'PY'
+import xml.etree.ElementTree as ET
+try:
+    for n in ET.parse('emu-out/ui.xml').getroot().iter('node'):
+        v=(n.get('text') or '')+'|'+(n.get('content-desc') or '')
+        if v.strip('|'): print('   screen:',v[:120])
+except Exception as e: print('   parse fail',e)
+PY
+}
 top(){ adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" | head -2; }
 
 note "1) release APK"
@@ -66,7 +78,8 @@ adb install -r out-test/signed/rent-aligned-signed.apk || fail=1
 adb logcat -c
 adb shell am force-stop $PKG
 adb shell am start -n $PKG/.MainActivity
-sleep 8
+wait_top 60 || echo "WARN: app not on top after 60s"
+sleep 3
 read W H <<< "$(adb shell wm size | grep -oE '[0-9]+x[0-9]+' | tail -1 | tr x ' ')"
 note "screen ${W}x${H}; tapping WebView test bar"
 adb shell input tap $((W/2)) $((H/4))
@@ -108,6 +121,69 @@ sleep 4; shot after
 top | tee $OUT/top-final.txt
 if grep -Eqi "chooser|resolver|intentresolver" $OUT/top-final.txt; then echo "PASS: file delivered to WebView (JS called Android.share with test.png)"; else echo "FAIL: file not delivered"; fail=1; fi
 shot final
+
+note "3) AI 비서 인텐트 (rentmanager://assistant) — 콜드 스타트 / 웜 스타트"
+# 데이터가 없는 앱이므로 "없는 호실" 안내 화면이 뜨면 인텐트→네이티브→JS 브릿지→처리→렌더 전체 경로가 동작한 것이다.
+mkcmd(){ python3 - "$1" "$2" <<'PY'
+import sys,json,time,urllib.parse
+c={"v":1,"id":sys.argv[1],"ts":int(time.time()*1000),"op":"record_payment","room":sys.argv[2],"amount":450000}
+print('rentmanager://assistant?cmd='+urllib.parse.quote(json.dumps(c,separators=(',',':')),safe=''))
+PY
+}
+adb install -r out/signed/rent-aligned-signed.apk || fail=1
+adb shell am force-stop $PKG
+adb logcat -c
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkcmd cold-1 777)" -p $PKG
+wait_text "찾을 수 없어요" 90; shot assistant-cold
+if grep -q "777" $OUT/ui.xml && grep -q "찾을 수 없어요" $OUT/ui.xml; then echo "PASS: cold-start assistant intent handled"; else echo "FAIL: cold-start assistant intent not handled"; top; dump_texts; fail=1; fi
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkcmd warm-2 888)" -p $PKG
+wait_text "888" 30; shot assistant-warm
+if grep -q "888" $OUT/ui.xml && ! grep -q "777" $OUT/ui.xml; then echo "PASS: warm-start assistant intent handled (replaced previous)"; else echo "FAIL: warm-start assistant intent not handled"; dump_texts; fail=1; fi
+# 같은 id 재전송은 무시되어야 한다 (재시작 시 재실행 방지)
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkcmd warm-2 999)" -p $PKG
+sleep 3; ui
+if grep -q "999" $OUT/ui.xml; then echo "FAIL: duplicate id was processed"; fail=1; else echo "PASS: duplicate id ignored"; fi
+# 잘못된 URI(불투명 URI)로도 앱이 죽지 않아야 한다
+adb shell am start -n $PKG/.MainActivity -a android.intent.action.VIEW -d "rentmanager:opaque"
+sleep 3
+adb shell pidof $PKG >/dev/null || { echo "FAIL: app died on malformed intent"; fail=1; }
+adb logcat -d > $OUT/logcat-assistant.txt
+if grep -E "FATAL EXCEPTION|VerifyError" $OUT/logcat-assistant.txt; then echo "FAIL: crash during assistant intents"; fail=1; fi
+
+note "4) AI 비서 조회 (op:query) — 비서 앱이 없어도 앱이 죽지 않고, 조회를 처리해 답을 보내려 시도한다"
+mkq(){ python3 - "$1" "$2" <<'PY'
+import sys,json,time,urllib.parse
+c={"v":1,"id":sys.argv[1],"ts":int(time.time()*1000),"op":"query","what":sys.argv[2]}
+print('rentmanager://assistant?cmd='+urllib.parse.quote(json.dumps(c,separators=(',',':')),safe=''))
+PY
+}
+adb shell am force-stop $PKG
+adb logcat -c
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkq query-cold-1 overview)" -p $PKG
+# 조회가 처리되면 앱 안에 "비서에 전달했어요" 안내가 잠깐 뜬다 (replyAssistant 브릿지 호출 → 비서 앱이 없으면 조용히 무시)
+if wait_text "비서에 전달했어요" 90; then echo "PASS: cold-start query handled (reply sent to bridge)"; else echo "FAIL: cold-start query not handled"; top; dump_texts; fail=1; fi
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d "$(mkq query-warm-2 rooms)" -p $PKG
+if wait_text "비서에 전달했어요" 30; then echo "PASS: warm-start query handled"; else echo "FAIL: warm-start query not handled"; dump_texts; fail=1; fi
+adb shell pidof $PKG >/dev/null || { echo "FAIL: app died on query"; fail=1; }
+adb logcat -d > $OUT/logcat-query.txt
+if grep -E "FATAL EXCEPTION|VerifyError|NoSuchMethodError" $OUT/logcat-query.txt; then echo "FAIL: crash during query"; fail=1; fi
+# 참고용(실패 아님): 답장 인텐트가 비서 패키지로만 향했는지
+grep -E "hwetassistant://result" $OUT/logcat-query.txt | head -3 | sed 's/^/   reply-intent: /' || true
+
+note "5) 백그라운드 읽기 제공자 (AssistantProvider) — 등록돼 있고, 비서 앱이 아닌 호출자(shell)는 거절된다"
+adb logcat -c
+adb shell content call --uri content://com.rentmanager.app.assistant --method snapshot > $OUT/provider-call.txt 2>&1 || true
+cat $OUT/provider-call.txt | sed 's/^/   provider: /'
+if grep -q "error=forbidden" $OUT/provider-call.txt; then echo "PASS: provider registered and caller-gated (shell -> forbidden)"; else echo "FAIL: provider did not answer forbidden"; fail=1; fi
+if grep -q "json=" $OUT/provider-call.txt; then echo "FAIL: provider leaked snapshot to a non-assistant caller"; fail=1; fi
+adb shell content call --uri content://com.rentmanager.app.assistant --method nope > $OUT/provider-call2.txt 2>&1 || true
+# 호출자 검사가 먼저가 아니라 메서드 검사가 먼저이므로 unknown_method (어느 쪽이든 데이터는 없다)
+grep -q "json=" $OUT/provider-call2.txt && { echo "FAIL: unknown method returned data"; fail=1; }
+adb shell content query --uri content://com.rentmanager.app.assistant > $OUT/provider-query.txt 2>&1 || true
+grep -qi "row" $OUT/provider-query.txt && { echo "FAIL: provider exposed rows via query"; fail=1; }
+adb shell pidof $PKG >/dev/null || { echo "FAIL: app died on provider call"; fail=1; }
+adb logcat -d > $OUT/logcat-provider.txt
+if grep -E "FATAL EXCEPTION|VerifyError|NoSuchMethodError" $OUT/logcat-provider.txt; then echo "FAIL: crash during provider calls"; fail=1; fi
 adb logcat -d > $OUT/logcat-test.txt
 grep -E "FATAL EXCEPTION|VerifyError" $OUT/logcat-test.txt && fail=1
 echo "RESULT fail=$fail"; exit $fail

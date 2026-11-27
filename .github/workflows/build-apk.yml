@@ -5,6 +5,9 @@ on:
     branches: ['**']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,3 +24,15 @@ jobs:
           name: rent-manager-apk
           path: out/signed/rent-aligned-signed.apk
           if-no-files-found: error
+      - name: Publish APK to GitHub Release (direct download)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(grep versionName apktool.yml | awk '{print $2}')
+          CODE=$(grep versionCode apktool.yml | grep -o "[0-9]*")
+          cp out/signed/rent-aligned-signed.apk "rent-manager-v${VER}.apk"
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest "rent-manager-v${VER}.apk" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "월세 관리 v${VER} (빌드 ${CODE})" \
+            --notes "최신 빌드입니다. APK를 받아 설치하세요. 커밋: ${GITHUB_SHA::7}"
