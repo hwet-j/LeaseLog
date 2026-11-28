@@ -2,7 +2,7 @@
 .super Landroid/content/ContentProvider;
 .source "AssistantProvider.java"
 
-# 비서 앱(com.hwetj.assistant)에게만 스냅샷 파일을 내주는 읽기 전용 제공자.
+# 비서 앱(com.hwetj.assistant)과 가계부 앱(com.hwetj.flowledger, 월세 입금 자동 반영용)에게만 스냅샷 파일을 내주는 읽기 전용 제공자.
 # 사용법: ContentResolver.call(content://com.rentmanager.app.assistant, "snapshot", null, null)
 #   -> Bundle{json:String, ts:long} | Bundle{error: forbidden|no_snapshot|unknown_method|read_failed}
 # query/insert/update/delete/getType 은 아무것도 노출하지 않는다.
@@ -13,6 +13,42 @@
     invoke-direct {p0}, Landroid/content/ContentProvider;-><init>()V
 
     return-void
+.end method
+
+.method private isAllowed(Ljava/lang/String;)Z
+    .locals 2
+
+    if-nez p1, :cond_nn
+
+    const/4 v0, 0x0
+
+    return v0
+
+    :cond_nn
+    const-string v0, "com.hwetj.assistant"
+
+    invoke-virtual {v0, p1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v1
+
+    if-nez v1, :cond_ok
+
+    const-string v0, "com.hwetj.flowledger"
+
+    invoke-virtual {v0, p1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v1
+
+    if-nez v1, :cond_ok
+
+    const/4 v0, 0x0
+
+    return v0
+
+    :cond_ok
+    const/4 v0, 0x1
+
+    return v0
 .end method
 
 .method private callerAllowed()Z
@@ -27,7 +63,7 @@
 
     if-eqz v0, :cond_uid
 
-    invoke-virtual {v1, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+    invoke-direct {p0, v0}, Lcom/rentmanager/app/AssistantProvider;->isAllowed(Ljava/lang/String;)Z
 
     move-result v2
 
@@ -65,7 +101,7 @@
 
     aget-object v4, v0, v3
 
-    invoke-virtual {v1, v4}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+    invoke-direct {p0, v4}, Lcom/rentmanager/app/AssistantProvider;->isAllowed(Ljava/lang/String;)Z
 
     move-result v5
 
